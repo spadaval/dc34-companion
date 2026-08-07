@@ -60,7 +60,7 @@ export class WebSerialTransport implements BadgeTransport {
       : (await import('web-serial-polyfill')).serial as unknown as Serial;
     if (!serialApi) throw new Error('Could not initialize the browser serial transport.');
 
-    const port = await serialApi.requestPort({ filters: [{ usbVendorId: 0x1209, usbProductId: 0x3613 }] });
+    const port = await serialApi.requestPort({ filters: [{ usbVendorId: 0x1d50, usbProductId: 0x6198 }] });
     await port.open({ baudRate: 1_000_000, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' });
     this.#port = port;
     this.#readTask = this.#readLoop(port);

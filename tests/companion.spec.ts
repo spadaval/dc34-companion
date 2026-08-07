@@ -50,6 +50,23 @@ test('shows useful guidance when Web Serial is unavailable', async ({ page }) =>
   await expect(page.getByText(/Use current Chrome or Edge/)).toBeVisible();
 });
 
+test('runs the complete image flow against the virtual badge', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Try virtual badge' }).click();
+  await expect(page.getByText('virtual-badge-1.0')).toBeVisible();
+  await expect(page.getByText('Virtual badge', { exact: true })).toBeVisible();
+  await expect(page.getByText('No custom image')).toBeVisible();
+
+  const png = await page.screenshot();
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'badge.png', mimeType: 'image/png', buffer: png });
+  await expect(page.getByText('Image ready', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Upload to badge' }).click();
+  await expect(page.getByText('Custom image stored')).toBeVisible({ timeout: 12_000 });
+  await page.getByRole('button', { name: 'Disconnect' }).click();
+  await page.getByRole('button', { name: 'Try virtual badge' }).click();
+  await expect(page.getByText('Custom image stored')).toBeVisible();
+});
+
 test('uses the mobile layout without horizontal overflow', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto('/');

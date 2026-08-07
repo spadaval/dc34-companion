@@ -1,7 +1,7 @@
 ---
 strategy: dc34-companion
 mission: build-browser-companion
-revision: 1
+revision: 2
 status: active
 sources:
   - README.md
@@ -17,6 +17,7 @@ Attendees can connect a DC34 badge from a supported browser, inspect a small set
 
 - A responsive SvelteKit application delivered over HTTPS by Vercel.
 - A transport-neutral badge client with Web Serial as the first transport.
+- A browser-local virtual badge transport for development, demonstrations, and hardware-free testing.
 - A single-owner, line-oriented serial session that tolerates command echo and unrelated log output.
 - Browser-local image processing: interactive square crop, zoom, threshold or Floyd–Steinberg dithering, exact wire-format preview, and chunked upload.
 - A focused read-only diagnostics surface; a general terminal and destructive factory or secret-management commands are not exposed.
@@ -32,6 +33,7 @@ Attendees can connect a DC34 badge from a supported browser, inspect a small set
 # Boundaries
 
 - Initial browser support targets Web Serial implementations. Unsupported browsers receive actionable fallback guidance.
+- The virtual badge models the companion-facing console contract, not the Baochip CPU, boot chain, or every peripheral.
 - This mission does not ship native Android USB support, BIO program upload, firmware update, `k0` operations, or arbitrary factory/test command buttons.
 - Diagnostics depend on what the stock badge prints; unavailable values remain clearly labeled rather than inferred.
 - Real-device success must not be claimed without testing on physical hardware.
@@ -63,8 +65,10 @@ Attendees can connect a DC34 badge from a supported browser, inspect a small set
 - Production build succeeds.
 - Unit tests prove CRC, packing, chunk framing, line parsing, and image-processing determinism.
 - Browser tests prove responsive navigation, unsupported-browser guidance, crop controls, conversion, and upload UI state using a fake transport.
+- Simulator tests prove command parsing, image CRC/chunk assembly, persistence, clear behavior, and display reconstruction.
 - Physical-badge verification remains an explicit follow-up gate.
 
 # Revision History
 
 - Revision 1: Published for the user-directed full application build. Establishes web-first scope and excludes destructive/factory operations from the normal UI.
+- Revision 2: User-directed expansion adds a simple browser-local virtual badge for hardware-free use; full hosted-Xous integration remains a later option.

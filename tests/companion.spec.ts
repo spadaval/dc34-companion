@@ -17,7 +17,7 @@ async function installFakeBadge(page: import('@playwright/test').Page): Promise<
         } else if (command.startsWith('image ')) {
           imageChunks += 1;
           controller.enqueue(encoder.encode(imageChunks === 32 ? 'SUCCESS\n' : 'OK\n'));
-        } else if (command === 'test hw') controller.enqueue(encoder.encode('_|TT|_HW.PASS,_|TE|_\n'));
+        } else if (command === 'test hw') controller.enqueue(encoder.encode('_|TT|_HW.PASS,_|TE|_\nXous version: test-1.0\n'));
       }
     });
     const port = { readable, writable, open: async () => {}, close: async () => controller.close() };
@@ -29,16 +29,25 @@ test('connects, reads diagnostics, prepares an image, and uploads it', async ({ 
   await installFakeBadge(page);
   await page.goto('/');
 
+  await expect(page.getByRole('tab', { name: 'Image' })).toHaveAttribute('aria-selected', 'true');
+  await page.getByRole('button', { name: /Not connected/ }).click();
+  await expect(page.getByRole('dialog', { name: 'Connection' })).toBeVisible();
   await page.getByRole('button', { name: 'Connect badge' }).click();
   await expect(page.getByText('test-1.0')).toBeVisible();
-  await expect(page.getByText('Connected', { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Connection' })).toBeHidden();
+  await expect(page.getByRole('button', { name: /Connected/ })).toBeVisible();
 
   const png = await page.screenshot();
   await page.locator('input[type=file]').first().setInputFiles({ name: 'badge.png', mimeType: 'image/png', buffer: png });
-  await expect(page.getByText('Image ready', { exact: true })).toBeVisible();
-  await expect(page.getByText('2,048 bytes', { exact: true })).toBeVisible();
+  await expect(page.getByText('2,048 bytes ready', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Upload to badge' }).click();
-  await expect(page.getByText('Image uploaded. It will alternate with the DEF CON logo.')).toBeVisible({ timeout: 12_000 });
+  await expect(page.getByRole('tabpanel', { name: 'Image' }).getByText('Image uploaded. It will alternate with the DEF CON logo.')).toBeVisible({ timeout: 12_000 });
+  await page.getByRole('button', { name: 'Clear', exact: true }).click();
+  await expect(page.getByRole('tabpanel', { name: 'Image' }).getByText('Custom image cleared from the badge.')).toBeVisible();
+
+  await page.getByRole('tab', { name: 'Diagnostics' }).click();
+  await page.getByRole('button', { name: 'Run hardware check' }).click();
+  await expect(page.getByRole('tabpanel', { name: 'Diagnostics' }).getByText('Hardware check passed.')).toBeVisible();
 });
 
 test('shows useful guidance when Web Serial is unavailable', async ({ page }) => {
@@ -46,8 +55,9 @@ test('shows useful guidance when Web Serial is unavailable', async ({ page }) =>
     Object.defineProperty(navigator, 'serial', { configurable: true, value: undefined });
   });
   await page.goto('/');
-  await expect(page.getByText('Unsupported browser', { exact: true }).first()).toBeVisible();
-  await expect(page.getByText(/Use current Chrome or Edge/)).toBeVisible();
+  await page.getByRole('button', { name: /Unsupported/ }).click();
+  await expect(page.getByRole('dialog', { name: 'Connection' })).toBeVisible();
+  await expect(page.getByText(/Chrome 148/)).toBeVisible();
 });
 
 test('uses the mobile layout without horizontal overflow', async ({ page }) => {
@@ -55,5 +65,5 @@ test('uses the mobile layout without horizontal overflow', async ({ page }) => {
   await page.goto('/');
   const hasOverflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
   expect(hasOverflow).toBe(false);
-  await expect(page.getByRole('heading', { name: 'Turn anything into badge art.' })).toBeVisible();
+  await expect(page.getByRole('tablist', { name: 'Tools' })).toBeVisible();
 });

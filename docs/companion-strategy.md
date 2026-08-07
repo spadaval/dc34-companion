@@ -1,7 +1,7 @@
 ---
 strategy: dc34-companion
 mission: build-browser-companion
-revision: 3
+revision: 4
 status: active
 sources:
   - README.md
@@ -16,6 +16,7 @@ Attendees can connect a DC34 badge from a supported browser, inspect a small set
 # Target System
 
 - A responsive SvelteKit application delivered over HTTPS by Vercel.
+- A compact tabbed application shell with persistent connection status and an explicit connection modal.
 - A transport-neutral badge client with Web Serial as the first transport.
 - A lightweight in-process transport double used only for fast UI tests.
 - A hosted-Xous validation harness that executes the actual DC34 console, image receiver, and hosted PDDB implementations. Running the actual DC34 vault remains a separate validation milestone.
@@ -76,3 +77,4 @@ Attendees can connect a DC34 badge from a supported browser, inspect a small set
 - Revision 1: Published for the user-directed full application build. Establishes web-first scope and excludes destructive/factory operations from the normal UI.
 - Revision 2: User-directed expansion adds a simple browser-local virtual badge for hardware-free use; full hosted-Xous integration remains a later option.
 - Revision 3: User-directed replacement removes the simulator as a product feature and makes hosted execution of the actual DC34 Rust/Xous stack the compatibility-validation target.
+- Revision 4: User-directed UX rework replaces the landing-page layout with persistent status, task tabs, and a connection modal while retaining the existing workflows.

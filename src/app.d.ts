@@ -20,6 +20,7 @@ declare global {
 
   interface Navigator {
     readonly serial?: Serial;
+    readonly usb?: unknown;
   }
 }
 

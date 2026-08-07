@@ -59,14 +59,27 @@ test('connects, reads diagnostics, prepares an image, and uploads it', async ({ 
   await expect(page.getByRole('tabpanel', { name: 'Console' }).locator('pre')).toContainText('hello');
 });
 
-test('shows useful guidance when Web Serial is unavailable', async ({ page }) => {
+test('offers WebUSB when native Web Serial is unavailable', async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(navigator, 'serial', { configurable: true, value: undefined });
+    Object.defineProperty(navigator, 'usb', { configurable: true, value: {} });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: /Not connected/ }).click();
+  await expect(page.getByRole('dialog', { name: 'Connection' })).toBeVisible();
+  await expect(page.getByText('WebUSB · CDC')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Connect badge' })).toBeEnabled();
+});
+
+test('shows useful guidance when browser USB APIs are unavailable', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'serial', { configurable: true, value: undefined });
+    Object.defineProperty(navigator, 'usb', { configurable: true, value: undefined });
   });
   await page.goto('/');
   await page.getByRole('button', { name: /Unsupported/ }).click();
   await expect(page.getByRole('dialog', { name: 'Connection' })).toBeVisible();
-  await expect(page.getByText(/Chrome 148/)).toBeVisible();
+  await expect(page.getByText(/USB host support on Android/)).toBeVisible();
 });
 
 test('uses the mobile layout without horizontal overflow', async ({ page }) => {

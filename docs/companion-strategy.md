@@ -1,7 +1,7 @@
 ---
 strategy: dc34-companion
 mission: build-browser-companion
-revision: 5
+revision: 6
 status: active
 sources:
   - README.md
@@ -17,7 +17,7 @@ Attendees can connect a DC34 badge from a supported browser, inspect a small set
 
 - A responsive SvelteKit application delivered over HTTPS by Vercel.
 - A compact tabbed application shell with persistent connection status and an explicit connection modal.
-- A transport-neutral badge client with Web Serial as the first transport.
+- A transport-neutral badge client using native Web Serial when available and a WebUSB CDC-ACM fallback on Android.
 - A lightweight in-process transport double used only for fast UI tests.
 - A hosted-Xous validation harness that executes the actual DC34 console, image receiver, and hosted PDDB implementations. Running the actual DC34 vault remains a separate validation milestone.
 - A single-owner, line-oriented serial session that tolerates command echo and unrelated log output.
@@ -36,9 +36,9 @@ Attendees can connect a DC34 badge from a supported browser, inspect a small set
 
 # Boundaries
 
-- Initial browser support targets Web Serial implementations. Unsupported browsers receive actionable fallback guidance.
+- Browser support targets native Web Serial on desktop and WebUSB CDC-ACM in Chrome on USB-host-capable Android devices. Unsupported browsers receive actionable guidance.
 - Hosted validation does not claim to emulate the Baochip CPU, secure boot, physical USB controller, flash timing, or every peripheral.
-- This mission does not ship native Android USB support, dedicated BIO/firmware/`k0` workflows, or arbitrary factory/test command buttons. Expert users may still invoke firmware-provided commands through the raw console.
+- This mission does not ship a native Android application, dedicated BIO/firmware/`k0` workflows, or arbitrary factory/test command buttons. Expert users may still invoke firmware-provided commands through the raw console.
 - Diagnostics depend on what the stock badge prints; unavailable values remain clearly labeled rather than inferred.
 - Real-device success must not be claimed without testing on physical hardware.
 
@@ -60,7 +60,7 @@ Attendees can connect a DC34 badge from a supported browser, inspect a small set
 ## Return To Strategy When
 
 - The stock badge cannot sustain Web Serial transfers at the required settings.
-- Android requires a different protocol or a native bridge.
+- Android WebUSB cannot claim or reliably transfer through the badge's CDC-ACM interfaces.
 - Reliable diagnostics require firmware changes or commands that mutate device state.
 
 # Assurance
@@ -80,3 +80,4 @@ Attendees can connect a DC34 badge from a supported browser, inspect a small set
 - Revision 3: User-directed replacement removes the simulator as a product feature and makes hosted execution of the actual DC34 Rust/Xous stack the compatibility-validation target.
 - Revision 4: User-directed UX rework replaces the landing-page layout with persistent status, task tabs, and a connection modal while retaining the existing workflows.
 - Revision 5: User-directed expansion adds a raw interactive console, full diagnostic refresh, pre-command input clearing, and live image-transfer output.
+- Revision 6: User-directed expansion adds an Android WebUSB CDC-ACM fallback while retaining native Web Serial on desktop. Physical Android-to-badge transfer remains the compatibility gate.

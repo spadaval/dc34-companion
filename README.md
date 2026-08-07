@@ -1,10 +1,10 @@
 # DC34 Companion
 
-A local-first browser companion for the DEF CON 34 badge. It connects directly over Web Serial, shows basic diagnostics, and turns ordinary images into the badge's exact 128×128, one-bit upload format.
+A local-first browser companion for the DEF CON 34 badge. It connects directly over Web Serial or WebUSB, shows basic diagnostics, and turns ordinary images into the badge's exact 128×128, one-bit upload format.
 
 ## Features
 
-- Explicit, user-approved serial connection at 1,000,000 baud
+- Explicit, user-approved serial connection at 1,000,000 baud over desktop Web Serial or Android WebUSB/CDC
 - Firmware version, hardware diagnostics, and manual refresh controls
 - Interactive serial console for direct badge commands
 - Interactive square crop, zoom, positioning, threshold, and Floyd–Steinberg dithering
@@ -16,7 +16,7 @@ Images and serial data stay in the browser; the app has no upload service or ana
 
 ## Browser support
 
-Web Serial requires a secure context and is best supported by current Chromium browsers such as Chrome or Edge on desktop. Android support varies by browser and USB hardware. Safari and Firefox do not currently expose Web Serial.
+Current Chrome or Edge can use Web Serial on desktop. Chrome on Android uses the WebUSB/CDC fallback and requires a USB host/OTG-capable device plus a data cable. Browser USB APIs require HTTPS. Safari and browsers without Web Serial or WebUSB are unsupported.
 
 ## Development
 

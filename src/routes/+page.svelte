@@ -22,6 +22,7 @@
   let hardwareResult: 'pass' | 'fail' | null = $state(null);
   let mounted = $state(false);
   let browserSupported = $state(false);
+  let transportName = $state('Unavailable');
   let activeTab: AppTab = $state('image');
   let connectionDialog: HTMLDialogElement;
   let consoleCommand = $state('');
@@ -31,10 +32,11 @@
 
   onMount(() => {
     browserSupported = WebSerialTransport.supported();
+    transportName = WebSerialTransport.availableName();
     mounted = true;
     if (!browserSupported) {
       connectionState = 'unsupported';
-      statusMessage = 'This browser does not provide Web Serial.';
+      statusMessage = 'This browser does not provide Web Serial or WebUSB.';
     }
   });
 
@@ -58,11 +60,12 @@
 
   async function connect(): Promise<void> {
     connectionState = 'connecting';
-    statusMessage = 'Choose the DC34 serial port in your browser prompt.';
+    statusMessage = 'Choose the DC34 badge in your browser prompt.';
     try {
       const nextTransport = new WebSerialTransport(handleUnexpectedDisconnect);
       await nextTransport.connect();
       transport = nextTransport;
+      transportName = nextTransport.name;
       session = new BadgeSession(nextTransport, recordLine);
       await readVersion();
       connectionState = 'connected';
@@ -273,7 +276,7 @@
         <div class="diagnostic-grid">
           <article><span>Connection</span><strong class:good={connected}>{connectionLabel}</strong></article>
           <article><span>Firmware</span><strong>{firmware}</strong></article>
-          <article><span>Transport</span><strong>{!mounted ? 'Checking…' : browserSupported ? 'Web Serial' : 'Unavailable'}</strong></article>
+          <article><span>Transport</span><strong>{!mounted ? 'Checking…' : transportName}</strong></article>
           <article><span>Hardware</span><strong class:good={hardwareResult === 'pass'} class:bad={hardwareResult === 'fail'}>{hardwareResult ?? 'Not tested'}</strong></article>
         </div>
         <div class="log-panel">
@@ -318,11 +321,11 @@
     <div><strong>{connectionLabel}</strong><small>{statusMessage}</small></div>
   </div>
   <div class="method-row">
-    <div><strong>Web Serial</strong><small>USB · 1,000,000 baud</small></div>
+    <div><strong>{transportName}</strong><small>USB · 1,000,000 baud</small></div>
     <span>{browserSupported ? 'Available' : 'Unavailable'}</span>
   </div>
   {#if connectionState === 'unsupported'}
-    <p class="support-note">Requires Chrome 148+ on Android or current Chrome/Edge on desktop.</p>
+    <p class="support-note">Use current Chrome or Edge on desktop, or Chrome with USB host support on Android.</p>
   {/if}
   <div class="dialog-actions">
     {#if connected}

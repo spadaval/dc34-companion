@@ -7,8 +7,25 @@ interface ReadWaiter {
   abort?: () => void;
 }
 
+export type BrowserSerialMode = 'web-serial' | 'web-usb';
+
+interface BrowserSerialApis {
+  serial?: Serial;
+  usb?: unknown;
+}
+
+export function browserSerialMode(apis: BrowserSerialApis): BrowserSerialMode | null {
+  if (apis.serial) return 'web-serial';
+  if (apis.usb) return 'web-usb';
+  return null;
+}
+
+function modeLabel(mode: BrowserSerialMode | null): string {
+  return mode === 'web-serial' ? 'Web Serial' : mode === 'web-usb' ? 'WebUSB · CDC' : 'Unavailable';
+}
+
 export class WebSerialTransport implements BadgeTransport {
-  readonly name = 'Web Serial';
+  #mode: BrowserSerialMode | null = null;
   #port: SerialPort | null = null;
   #reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
   #readTask: Promise<void> | null = null;
@@ -18,7 +35,15 @@ export class WebSerialTransport implements BadgeTransport {
   constructor(private readonly onDisconnect?: () => void) {}
 
   static supported(): boolean {
-    return typeof navigator !== 'undefined' && navigator.serial !== undefined;
+    return typeof navigator !== 'undefined' && browserSerialMode(navigator) !== null;
+  }
+
+  static availableName(): string {
+    return typeof navigator === 'undefined' ? 'Unavailable' : modeLabel(browserSerialMode(navigator));
+  }
+
+  get name(): string {
+    return modeLabel(this.#mode);
   }
 
   get connected(): boolean {
@@ -26,10 +51,16 @@ export class WebSerialTransport implements BadgeTransport {
   }
 
   async connect(): Promise<void> {
-    if (!navigator.serial) throw new Error('Web Serial is not supported by this browser.');
     if (this.#port) return;
 
-    const port = await navigator.serial.requestPort();
+    this.#mode = browserSerialMode(navigator);
+    if (!this.#mode) throw new Error('This browser does not provide Web Serial or WebUSB.');
+    const serialApi = this.#mode === 'web-serial'
+      ? navigator.serial
+      : (await import('web-serial-polyfill')).serial as unknown as Serial;
+    if (!serialApi) throw new Error('Could not initialize the browser serial transport.');
+
+    const port = await serialApi.requestPort({ filters: [{ usbVendorId: 0x1209, usbProductId: 0x3613 }] });
     await port.open({ baudRate: 1_000_000, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' });
     this.#port = port;
     this.#readTask = this.#readLoop(port);

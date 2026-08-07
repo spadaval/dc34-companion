@@ -7,7 +7,7 @@
 
   type ConnectionState = 'unsupported' | 'disconnected' | 'connecting' | 'connected';
   type ActionState = 'idle' | 'working' | 'success' | 'error';
-  type AppTab = 'image' | 'diagnostics';
+  type AppTab = 'image' | 'diagnostics' | 'console';
 
   let connectionState = $state<ConnectionState>('disconnected');
   let actionState = $state<ActionState>('idle');
@@ -24,6 +24,10 @@
   let browserSupported = $state(false);
   let activeTab: AppTab = $state('image');
   let connectionDialog: HTMLDialogElement;
+  let consoleCommand = $state('');
+  let transferLines: string[] = $state([]);
+  let captureTransfer = $state(false);
+  let hardwareCheckActive = false;
 
   onMount(() => {
     browserSupported = WebSerialTransport.supported();
@@ -36,9 +40,10 @@
 
   function recordLine(line: string): void {
     if (!line.trim()) return;
-    if (line.includes('HW.PASS')) hardwareResult = 'pass';
-    if (line.includes('HW.FAIL')) hardwareResult = 'fail';
+    if (hardwareCheckActive && line.includes('HW.PASS')) hardwareResult = 'pass';
+    if (hardwareCheckActive && line.includes('HW.FAIL')) hardwareResult = 'fail';
     consoleLines = [...consoleLines.slice(-79), line];
+    if (captureTransfer) transferLines = [...transferLines.slice(-39), line];
   }
 
   function handleUnexpectedDisconnect(): void {
@@ -87,14 +92,16 @@
     connectionDialog?.showModal();
   }
 
-  async function readVersion(): Promise<void> {
-    if (!session) return;
+  async function readVersion(): Promise<boolean> {
+    if (!session) return false;
     try {
       const result = await session.transact('ver xous', ['version'], { maxRetries: 0, timeoutMs: 4_000 });
       firmware = result.response.line.replace(/^Xous version:\s*/i, '') || result.response.line;
+      return true;
     } catch (cause) {
       recordLine(`[companion] ${cause instanceof Error ? cause.message : 'Version query failed.'}`);
       firmware = 'Unavailable';
+      return false;
     }
   }
 
@@ -105,11 +112,7 @@
     showLog = true;
     statusMessage = 'Running the badge’s read-only hardware check…';
     try {
-      await session.transact('test hw', ['hardware-pass', 'hardware-fail', 'version'], {
-        maxRetries: 0,
-        timeoutMs: 30_000,
-        completeOn: 'version'
-      });
+      await performHardwareCheck();
       actionState = hardwareResult === 'pass' ? 'success' : 'error';
       statusMessage = hardwareResult === 'pass' ? 'Hardware check passed.' : hardwareResult === 'fail' ? 'Hardware check reported a failure. Review the diagnostic log.' : 'Hardware check ended without a result marker.';
     } catch (cause) {
@@ -118,10 +121,44 @@
     }
   }
 
+  async function performHardwareCheck(): Promise<void> {
+    if (!session) return;
+    hardwareCheckActive = true;
+    hardwareResult = null;
+    try {
+      await session.transact('test hw', ['hardware-pass', 'hardware-fail', 'version'], {
+        maxRetries: 0,
+        timeoutMs: 30_000,
+        completeOn: 'version'
+      });
+    } finally {
+      hardwareCheckActive = false;
+    }
+  }
+
+  async function refreshDiagnostics(): Promise<void> {
+    if (!session || actionState === 'working') return;
+    actionState = 'working';
+    statusMessage = 'Refreshing diagnostics…';
+    try {
+      const versionAvailable = await readVersion();
+      await performHardwareCheck();
+      actionState = hardwareResult === 'pass' && versionAvailable ? 'success' : 'error';
+      statusMessage = hardwareResult !== 'pass'
+        ? 'Hardware check reported a failure.'
+        : versionAvailable ? 'Diagnostics refreshed.' : 'Hardware passed; firmware version was not reported.';
+    } catch (cause) {
+      actionState = 'error';
+      statusMessage = cause instanceof Error ? cause.message : 'Could not refresh diagnostics.';
+    }
+  }
+
   async function uploadImage(): Promise<void> {
     if (!session || !badgeImage || actionState === 'working') return;
     actionState = 'working';
     progress = 0;
+    transferLines = [];
+    captureTransfer = true;
     statusMessage = 'Clearing any partial transfer and uploading 32 chunks…';
     try {
       await session.uploadImage(badgeImage.payload, {
@@ -133,6 +170,8 @@
     } catch (cause) {
       actionState = 'error';
       statusMessage = cause instanceof Error ? cause.message : 'Image upload failed.';
+    } finally {
+      captureTransfer = false;
     }
   }
 
@@ -147,6 +186,23 @@
     } catch (cause) {
       actionState = 'error';
       statusMessage = cause instanceof Error ? cause.message : 'Could not clear the image.';
+    }
+  }
+
+  async function sendConsoleCommand(event: SubmitEvent): Promise<void> {
+    event.preventDefault();
+    if (!session || actionState === 'working' || !consoleCommand.trim()) return;
+    const command = consoleCommand;
+    consoleCommand = '';
+    actionState = 'working';
+    statusMessage = `Running ${command}…`;
+    try {
+      await session.executeConsoleCommand(command);
+      actionState = 'success';
+      statusMessage = 'Command complete.';
+    } catch (cause) {
+      actionState = 'error';
+      statusMessage = cause instanceof Error ? cause.message : 'Command failed.';
     }
   }
 
@@ -169,13 +225,14 @@
     <button class="connection-button" type="button" onclick={openConnectionDialog} aria-haspopup="dialog" disabled={!mounted}>
       <span class:online={connected} class="pulse"></span>
       <span>{connectionLabel}</span>
-      {#if connected}<small>{firmware}</small>{/if}
+      {#if connected && firmware !== 'Unavailable'}<small>{firmware}</small>{/if}
     </button>
   </header>
 
   <div class="tabs" role="tablist" aria-label="Tools">
     <button id="image-tab" type="button" role="tab" aria-selected={activeTab === 'image'} aria-controls="image-panel" onclick={() => (activeTab = 'image')}>Image</button>
     <button id="diagnostics-tab" type="button" role="tab" aria-selected={activeTab === 'diagnostics'} aria-controls="diagnostics-panel" onclick={() => (activeTab = 'diagnostics')}>Diagnostics</button>
+    <button id="console-tab" type="button" role="tab" aria-selected={activeTab === 'console'} aria-controls="console-panel" onclick={() => (activeTab = 'console')}>Console</button>
   </div>
 
   <main>
@@ -189,9 +246,6 @@
         <div class="actionbar" aria-live="polite">
           <div class="action-status">
             <strong>{statusMessage}</strong>
-            {#if actionState === 'working' && progress > 0}
-              <progress max="1" value={progress}>{Math.round(progress * 100)}%</progress>
-            {/if}
           </div>
           <div class="actions">
             <button class="secondary" type="button" onclick={clearImage} disabled={!connected || actionState === 'working'}>Clear</button>
@@ -200,14 +254,21 @@
             </button>
           </div>
         </div>
+        {#if transferLines.length || (actionState === 'working' && captureTransfer)}
+          <div class="transfer-console">
+            <div><span>Transfer console</span><span>{transferLines.length} lines</span></div>
+            <pre aria-live="polite">{transferLines.length ? transferLines.join('\n') : 'Waiting for badge…'}</pre>
+          </div>
+        {/if}
       </div>
-    {:else}
+    {:else if activeTab === 'diagnostics'}
       <div id="diagnostics-panel" class="tool-panel" role="tabpanel" aria-labelledby="diagnostics-tab">
         <div class="panel-heading">
           <h1>Diagnostics</h1>
-          <button type="button" onclick={runHardwareCheck} disabled={!connected || actionState === 'working'}>
-            {actionState === 'working' ? 'Running…' : 'Run hardware check'}
-          </button>
+          <div class="heading-actions">
+            <button class="secondary" type="button" onclick={runHardwareCheck} disabled={!connected || actionState === 'working'}>Hardware check</button>
+            <button type="button" onclick={refreshDiagnostics} disabled={!connected || actionState === 'working'}>{actionState === 'working' ? 'Refreshing…' : 'Refresh all'}</button>
+          </div>
         </div>
         <div class="diagnostic-grid">
           <article><span>Connection</span><strong class:good={connected}>{connectionLabel}</strong></article>
@@ -224,6 +285,24 @@
           {/if}
         </div>
         <p class:success={actionState === 'success'} class:error={actionState === 'error'} class="result-message" aria-live="polite">{statusMessage}</p>
+      </div>
+    {:else}
+      <div id="console-panel" class="tool-panel console-panel" role="tabpanel" aria-labelledby="console-tab">
+        <div class="panel-heading">
+          <div><span class="kicker">RAW SERIAL</span><h1>Console</h1></div>
+          <button class="secondary" type="button" onclick={() => (consoleLines = [])} disabled={!consoleLines.length}>Clear output</button>
+        </div>
+        <div class="terminal">
+          <pre aria-live="polite">{consoleLines.length ? consoleLines.join('\n') : 'No output'}</pre>
+          <form onsubmit={sendConsoleCommand}>
+            <label for="console-command">Command</label>
+            <span aria-hidden="true">›</span>
+            <input id="console-command" bind:value={consoleCommand} autocomplete="off" spellcheck="false" placeholder="ver xous" disabled={!connected || actionState === 'working'} />
+            <button type="submit" disabled={!connected || actionState === 'working' || !consoleCommand.trim()}>Send</button>
+          </form>
+        </div>
+        <p class="console-warning">Commands run directly on the badge and may change stored data.</p>
+        <p class:error={actionState === 'error'} class="result-message" aria-live="polite">{statusMessage}</p>
       </div>
     {/if}
   </main>
@@ -273,7 +352,6 @@
   .log-panel { margin-top: 14px; border: 1px solid var(--line); }
   .log-panel > button { display: flex; width: 100%; justify-content: space-between; color: #aeb4b6; background: #111416; font: 700 11px/1 ui-monospace, monospace; letter-spacing: .08em; }
   pre { max-height: 280px; overflow: auto; margin: 0; padding: 18px; color: #aeb8a2; background: #050607; font: 11px/1.65 ui-monospace, monospace; white-space: pre-wrap; }
-  progress { width: 100%; height: 6px; margin-top: 10px; accent-color: var(--acid); }
   .app-shell { min-height: 100vh; }
   .topbar { position: sticky; top: 0; z-index: 20; min-height: 64px; padding: 0 max(20px, calc((100vw - 1240px) / 2)); border-bottom: 1px solid var(--line); background: rgba(9,11,13,.94); backdrop-filter: blur(16px); }
   .topbar .brand { gap: 10px; }
@@ -296,12 +374,23 @@
   .action-status strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .actions { display: flex; gap: 10px; flex: 0 0 auto; }
   .actions button { min-width: 104px; }
+  .heading-actions { display: flex; gap: 10px; }
+  .transfer-console { margin-top: 20px; border: 1px solid var(--line); }
+  .transfer-console > div { display: flex; justify-content: space-between; padding: 10px 14px; color: var(--muted); background: #111416; font: 700 10px/1 ui-monospace, monospace; text-transform: uppercase; }
+  .transfer-console pre { max-height: 240px; overflow: auto; white-space: pre; }
   .diagnostic-grid { grid-template-columns: repeat(4, minmax(0,1fr)); }
   .diagnostic-grid article { min-height: 116px; background: var(--panel); }
   .diagnostic-grid .bad { color: var(--danger); }
   .result-message { min-height: 24px; color: var(--muted); font-size: .8rem; }
   .result-message.success { color: var(--acid); }
   .result-message.error { color: var(--danger); }
+  .terminal { overflow: hidden; border: 1px solid var(--line); background: #050607; }
+  .terminal pre { min-height: min(54vh, 480px); max-height: 54vh; }
+  .terminal form { display: grid; grid-template-columns: auto auto minmax(0,1fr) auto; align-items: center; gap: 10px; padding: 12px; border-top: 1px solid var(--line); background: #0d1012; }
+  .terminal form label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .terminal form > span { color: var(--acid); font: 800 18px/1 ui-monospace, monospace; }
+  .terminal input { width: 100%; min-height: 42px; padding: 0 12px; color: #edf0e9; border: 1px solid #343a3e; background: #080a0b; font: 13px/1 ui-monospace, monospace; }
+  .console-warning { color: var(--danger); font-size: .72rem; }
   .connection-dialog { width: min(480px, calc(100% - 28px)); padding: 0; color: #f3f4ee; border: 1px solid #464d52; background: #111416; box-shadow: 0 24px 100px rgba(0,0,0,.68); }
   .connection-dialog::backdrop { background: rgba(1,2,3,.76); backdrop-filter: blur(4px); }
   .dialog-heading { display: flex; align-items: start; justify-content: space-between; padding: 24px; border-bottom: 1px solid var(--line); }
@@ -326,10 +415,16 @@
     .actionbar { align-items: stretch; flex-direction: column; gap: 12px; padding-bottom: max(14px, env(safe-area-inset-bottom)); }
     .action-status strong { white-space: normal; }
     .actions { display: grid; grid-template-columns: 1fr 1.5fr; }
+    .heading-actions { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+    .diagnostic-grid + .log-panel { margin-top: 12px; }
+    .terminal pre { min-height: 46vh; }
   }
   @media (max-width: 430px) {
     .brand > span:last-child { display: none; }
     .diagnostic-grid { grid-template-columns: 1fr; }
     .panel-heading { align-items: start; }
+    #diagnostics-panel .panel-heading { flex-direction: column; }
+    .terminal form { grid-template-columns: auto minmax(0,1fr); }
+    .terminal form button { grid-column: 1 / -1; }
   }
 </style>

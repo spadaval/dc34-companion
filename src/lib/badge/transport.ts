@@ -33,6 +33,12 @@ export interface UploadOptions extends TransactionOptions {
 	chunkDelayMs?: number;
 }
 
+export interface ConsoleCommandOptions {
+	timeoutMs?: number;
+	idleMs?: number;
+	signal?: AbortSignal;
+}
+
 export class BadgeProtocolError extends Error {
 	constructor(message: string, readonly causeResponse?: BadgeResponse) {
 		super(message);
@@ -44,6 +50,7 @@ const encoder = new TextEncoder();
 const DEFAULT_TIMEOUT_MS = 4_000;
 const DEFAULT_MAX_RETRIES = 4;
 const DEFAULT_RETRY_DELAY_MS = 500;
+const CONSOLE_CLEAR_CHARACTERS = 64;
 
 /** A single-owner, transport-neutral line protocol session. */
 export class BadgeSession {
@@ -85,6 +92,44 @@ export class BadgeSession {
 		});
 	}
 
+	async executeConsoleCommand(command: string, options: ConsoleCommandOptions = {}): Promise<string[]> {
+		if (!command.trim()) throw new RangeError('Enter a command.');
+		if (/[\r\n]/.test(command)) throw new RangeError('Console commands must fit on one line.');
+		const timeoutMs = options.timeoutMs ?? 10_000;
+		const idleMs = options.idleMs ?? 750;
+		if (timeoutMs <= 0 || idleMs <= 0) throw new RangeError('Console timeouts must be positive.');
+
+		return this.enqueue(async () => {
+			await this.writeCommand(command, options.signal);
+			const lines: string[] = [];
+			const totalTimeout = new AbortController();
+			const totalTimeoutId = setTimeout(() => totalTimeout.abort(), timeoutMs);
+			try {
+				while (true) {
+					const idleTimeout = new AbortController();
+					const idleTimeoutId = setTimeout(() => idleTimeout.abort(), lines.length ? idleMs : timeoutMs);
+					try {
+						const signal = combineSignals(combineSignals(options.signal, totalTimeout.signal), idleTimeout.signal);
+						const line = await this.nextLine(signal);
+						if (line === null) throw new BadgeProtocolError('Transport closed while waiting for console output.');
+						this.onLine?.(line);
+						lines.push(line);
+					} catch (error) {
+						if (idleTimeout.signal.aborted && lines.length && !totalTimeout.signal.aborted) return lines;
+						if (totalTimeout.signal.aborted && !options.signal?.aborted) {
+							throw new BadgeProtocolError('Timed out waiting for console output.');
+						}
+						throw error;
+					} finally {
+						clearTimeout(idleTimeoutId);
+					}
+				}
+			} finally {
+				clearTimeout(totalTimeoutId);
+			}
+		});
+	}
+
 	async transact(
 		command: string,
 		expected: readonly BadgeResponseKind[],
@@ -105,7 +150,7 @@ export class BadgeSession {
 
 		for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
 			throwIfAborted(options.signal);
-			await this.transport.write(encoder.encode(`${command}\n`), options.signal);
+			await this.writeCommand(command, options.signal);
 			try {
 				const response = await this.waitForResponse(expected, timeoutMs, options.signal, options.completeOn);
 				return { response, attempt };
@@ -115,6 +160,10 @@ export class BadgeSession {
 			}
 		}
 		throw new BadgeProtocolError('Transaction exhausted without a response.');
+	}
+
+	private async writeCommand(command: string, signal?: AbortSignal): Promise<void> {
+		await this.transport.write(encoder.encode(`${'\b'.repeat(CONSOLE_CLEAR_CHARACTERS)}${command}\n`), signal);
 	}
 
 	private async enqueue<T>(operation: () => Promise<T>): Promise<T> {

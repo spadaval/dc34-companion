@@ -5,13 +5,14 @@ A local-first browser companion for the DEF CON 34 badge. It connects directly o
 ## Features
 
 - Explicit, user-approved serial connection at 1,000,000 baud
-- Firmware version and read-only hardware diagnostic console
+- Firmware version, hardware diagnostics, and manual refresh controls
+- Interactive serial console for direct badge commands
 - Interactive square crop, zoom, positioning, threshold, and Floyd–Steinberg dithering
 - Exact pixel preview and protocol-compatible 2,048-byte image upload
-- Per-chunk validation, retry, progress, and clear-image controls
+- Per-chunk validation, retry, live console transcript, and clear-image controls
 - Responsive layout for desktop and mobile-sized browsers
 
-Images and serial data stay in the browser; the app has no upload service or analytics. The normal interface deliberately excludes firmware flashing, key management, factory commands, and other destructive console operations.
+Images and serial data stay in the browser; the app has no upload service or analytics. Firmware flashing, key management, and factory operations are not exposed as first-class workflows. The raw console is intended for expert use and warns that commands may change stored data.
 
 ## Browser support
 

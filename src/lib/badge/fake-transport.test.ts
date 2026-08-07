@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { FakeBadgeTransport } from './fake-transport';
 import { BadgeProtocolError, BadgeSession } from './transport';
 
+const clearedCommand = (command: string) => `${'\b'.repeat(64)}${command}\n`;
+
 describe('FakeBadgeTransport with BadgeSession', () => {
 	it('ignores echoes and logs before accepting a response', async () => {
 		const transport = new FakeBadgeTransport();
@@ -13,7 +15,7 @@ describe('FakeBadgeTransport with BadgeSession', () => {
 			response: { kind: 'clear' },
 			attempt: 0
 		});
-		expect(new TextDecoder().decode(transport.writes[0])).toBe('image clear\n');
+		expect(new TextDecoder().decode(transport.writes[0])).toBe(clearedCommand('image clear'));
 	});
 
 	it('retries a rejected transaction and preserves command framing', async () => {
@@ -25,7 +27,27 @@ describe('FakeBadgeTransport with BadgeSession', () => {
 			response: { kind: 'ok' },
 			attempt: 1
 		});
-		expect(transport.writes.map((bytes) => new TextDecoder().decode(bytes))).toEqual(['ver\n', 'ver\n']);
+		expect(transport.writes.map((bytes) => new TextDecoder().decode(bytes))).toEqual([
+			clearedCommand('ver'),
+			clearedCommand('ver')
+		]);
+	});
+
+	it('runs an arbitrary console command and collects output until the console becomes idle', async () => {
+		const transport = new FakeBadgeTransport();
+		transport.enqueueText('[console] echo hello\nhello\n');
+		const session = new BadgeSession(transport);
+
+		await expect(session.executeConsoleCommand('echo hello', { timeoutMs: 50, idleMs: 5 })).resolves.toEqual([
+			'[console] echo hello',
+			'hello'
+		]);
+		expect(new TextDecoder().decode(transport.writes[0])).toBe(clearedCommand('echo hello'));
+	});
+
+	it('rejects multiline console input', async () => {
+		const session = new BadgeSession(new FakeBadgeTransport());
+		await expect(session.executeConsoleCommand('echo ok\nimage clear')).rejects.toThrow('one line');
 	});
 
 	it('reports an unexpected terminal response', async () => {

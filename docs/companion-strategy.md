@@ -1,7 +1,7 @@
 ---
 strategy: dc34-companion
 mission: build-browser-companion
-revision: 4
+revision: 5
 status: active
 sources:
   - README.md
@@ -22,7 +22,7 @@ Attendees can connect a DC34 badge from a supported browser, inspect a small set
 - A hosted-Xous validation harness that executes the actual DC34 console, image receiver, and hosted PDDB implementations. Running the actual DC34 vault remains a separate validation milestone.
 - A single-owner, line-oriented serial session that tolerates command echo and unrelated log output.
 - Browser-local image processing: interactive square crop, zoom, threshold or Floyd–Steinberg dithering, exact wire-format preview, and chunked upload.
-- A focused read-only diagnostics surface; a general terminal and destructive factory or secret-management commands are not exposed.
+- A diagnostics surface plus an explicitly labeled raw console for user-directed badge commands.
 
 # Governing Decisions
 
@@ -30,6 +30,7 @@ Attendees can connect a DC34 badge from a supported browser, inspect a small set
 - Hardware access and image processing remain client-side. No badge data is uploaded to an application server.
 - The protocol layer owns framing, timeouts, retries, response classification, and cancellation; UI components do not write raw serial data.
 - Image uploads begin by clearing badge-side partial image state, then send 32 indexed CRC-protected chunks sequentially.
+- Every console command clears pending shared-keyboard input before transmission so physical badge events cannot contaminate serial commands.
 - Validation fidelity comes from running the pinned Rust implementations; protocol doubles are not evidence of firmware compatibility.
 - Accessibility and understandable failure recovery take priority over dense expert tooling.
 
@@ -37,7 +38,7 @@ Attendees can connect a DC34 badge from a supported browser, inspect a small set
 
 - Initial browser support targets Web Serial implementations. Unsupported browsers receive actionable fallback guidance.
 - Hosted validation does not claim to emulate the Baochip CPU, secure boot, physical USB controller, flash timing, or every peripheral.
-- This mission does not ship native Android USB support, BIO program upload, firmware update, `k0` operations, or arbitrary factory/test command buttons.
+- This mission does not ship native Android USB support, dedicated BIO/firmware/`k0` workflows, or arbitrary factory/test command buttons. Expert users may still invoke firmware-provided commands through the raw console.
 - Diagnostics depend on what the stock badge prints; unavailable values remain clearly labeled rather than inferred.
 - Real-device success must not be claimed without testing on physical hardware.
 
@@ -48,7 +49,7 @@ Attendees can connect a DC34 badge from a supported browser, inspect a small set
 
 - No server-side image transfer or telemetry.
 - No silent device access; connection always follows the browser permission gesture.
-- No destructive badge command in the normal UI.
+- Destructive badge operations are never presented as first-class controls; the raw console carries an explicit mutation warning.
 - Exact compatibility with the stock image chunk format.
 
 ## Managers May Change
@@ -78,3 +79,4 @@ Attendees can connect a DC34 badge from a supported browser, inspect a small set
 - Revision 2: User-directed expansion adds a simple browser-local virtual badge for hardware-free use; full hosted-Xous integration remains a later option.
 - Revision 3: User-directed replacement removes the simulator as a product feature and makes hosted execution of the actual DC34 Rust/Xous stack the compatibility-validation target.
 - Revision 4: User-directed UX rework replaces the landing-page layout with persistent status, task tabs, and a connection modal while retaining the existing workflows.
+- Revision 5: User-directed expansion adds a raw interactive console, full diagnostic refresh, pre-command input clearing, and live image-transfer output.

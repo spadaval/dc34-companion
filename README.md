@@ -1,6 +1,21 @@
 # DC34 Companion
 
-A browser-based companion for the DEF CON 34 badge. This initial placeholder establishes the responsive SvelteKit UI and deployment pipeline.
+A local-first browser companion for the DEF CON 34 badge. It connects directly over Web Serial, shows basic diagnostics, and turns ordinary images into the badge's exact 128×128, one-bit upload format.
+
+## Features
+
+- Explicit, user-approved serial connection at 1,000,000 baud
+- Firmware version and read-only hardware diagnostic console
+- Interactive square crop, zoom, positioning, threshold, and Floyd–Steinberg dithering
+- Exact pixel preview and protocol-compatible 2,048-byte image upload
+- Per-chunk validation, retry, progress, and clear-image controls
+- Responsive layout for desktop and mobile-sized browsers
+
+Images and serial data stay in the browser; the app has no upload service or analytics. The normal interface deliberately excludes firmware flashing, key management, factory commands, and other destructive console operations.
+
+## Browser support
+
+Web Serial requires a secure context and is best supported by current Chromium browsers such as Chrome or Edge on desktop. Android support varies by browser and USB hardware. Safari and Firefox do not currently expose Web Serial.
 
 ## Development
 
@@ -9,10 +24,13 @@ npm install
 npm run dev
 ```
 
-## Roadmap
+Before shipping a change:
 
-- Web Serial connection and capability probing
-- Read-only badge diagnostics
-- Interactive 128×128 crop and monochrome preview
-- Dithering and image upload
-- Optional advanced BIO tooling
+```sh
+npm test
+npm run check
+npm run build
+npm run test:e2e
+```
+
+The browser tests use a simulated badge transport; final hardware compatibility still needs a physical DC34 badge.

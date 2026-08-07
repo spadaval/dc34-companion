@@ -1,22 +1,17 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import ImageEditor from '$lib/components/ImageEditor.svelte';
-  import VirtualDisplay from '$lib/components/VirtualDisplay.svelte';
   import type { BadgeImage } from '$lib/image/processing';
-  import { BadgeSession, type BadgeTransport } from '$lib/badge/transport';
+  import { BadgeSession } from '$lib/badge/transport';
   import { WebSerialTransport } from '$lib/badge/web-serial';
-  import { VirtualBadgeTransport } from '$lib/badge/virtual-badge';
 
   type ConnectionState = 'unsupported' | 'disconnected' | 'connecting' | 'connected';
   type ActionState = 'idle' | 'working' | 'success' | 'error';
 
   let connectionState = $state<ConnectionState>('disconnected');
   let actionState = $state<ActionState>('idle');
-  let transport: BadgeTransport | null = null;
-  let virtualTransport: VirtualBadgeTransport | null = null;
+  let transport: WebSerialTransport | null = null;
   let session: BadgeSession | null = null;
-  let transportMode: 'serial' | 'virtual' | null = $state(null);
-  let virtualImage: Uint8Array | null = $state(null);
   let firmware = $state('—');
   let badgeImage: BadgeImage | null = $state(null);
   let progress = $state(0);
@@ -60,7 +55,6 @@
       const nextTransport = new WebSerialTransport(handleUnexpectedDisconnect);
       await nextTransport.connect();
       transport = nextTransport;
-      transportMode = 'serial';
       session = new BadgeSession(nextTransport, recordLine);
       await readVersion();
       connectionState = 'connected';
@@ -74,27 +68,10 @@
     }
   }
 
-  async function connectVirtual(): Promise<void> {
-    connectionState = 'connecting';
-    statusMessage = 'Starting a browser-local virtual badge…';
-    const nextTransport = virtualTransport ?? new VirtualBadgeTransport((state) => {
-      virtualImage = state.storedImage;
-    });
-    virtualTransport = nextTransport;
-    await nextTransport.connect();
-    transport = nextTransport;
-    transportMode = 'virtual';
-    session = new BadgeSession(nextTransport, recordLine);
-    await readVersion();
-    connectionState = 'connected';
-    statusMessage = 'Virtual badge connected. Nothing will be sent over USB.';
-  }
-
   async function disconnect(): Promise<void> {
     await transport?.close?.();
     transport = null;
     session = null;
-    transportMode = null;
     connectionState = 'disconnected';
     firmware = '—';
     statusMessage = 'Badge disconnected.';
@@ -139,8 +116,7 @@
     statusMessage = 'Clearing any partial transfer and uploading 32 chunks…';
     try {
       await session.uploadImage(badgeImage.payload, {
-        onProgress: (completed, total) => (progress = completed / total),
-        chunkDelayMs: transportMode === 'virtual' ? 0 : undefined
+        onProgress: (completed, total) => (progress = completed / total)
       });
       progress = 1;
       actionState = 'success';
@@ -204,14 +180,8 @@
           <button type="button" onclick={connect} disabled={!mounted || !browserSupported || connectionState === 'connecting'}>
             {connectionState === 'connecting' ? 'Connecting…' : 'Connect badge'} <span aria-hidden="true">→</span>
           </button>
-          <button class="secondary virtual-button" type="button" onclick={connectVirtual} disabled={!mounted || connectionState === 'connecting'}>Try virtual badge</button>
         {/if}
-        {#if connected && transportMode === 'virtual'}
-          <VirtualDisplay payload={virtualImage} />
-        {/if}
-        {#if connected && transportMode === 'virtual'}
-          <p>This simulation runs entirely in this tab.</p>
-        {:else if connectionState === 'unsupported'}
+        {#if connectionState === 'unsupported'}
           <p>Use current Chrome or Edge on desktop. Android support depends on the phone and browser.</p>
         {:else}
           <p>Your browser will ask you to choose and approve a serial device.</p>
@@ -227,7 +197,7 @@
       <div class="diagnostic-grid">
         <article><span>Connection</span><strong class:good={connected}>{connectionLabel}</strong></article>
         <article><span>Firmware</span><strong>{firmware}</strong></article>
-        <article><span>Transport</span><strong>{transportMode === 'virtual' ? 'Virtual badge' : !mounted ? 'Checking…' : browserSupported ? 'Web Serial' : 'Unavailable'}</strong></article>
+        <article><span>Transport</span><strong>{!mounted ? 'Checking…' : browserSupported ? 'Web Serial' : 'Unavailable'}</strong></article>
         <article><span>Prepared image</span><strong>{badgeImage ? '2,048 bytes' : 'None'}</strong></article>
       </div>
       <div class="log-panel" class:open={showLog}>
@@ -297,7 +267,6 @@
   button { border: 0; padding: 0 18px; font-weight: 800; background: var(--acid); color: var(--ink); cursor: pointer; }
   button:disabled { cursor: not-allowed; opacity: .38; }
   .connect-card > button { width: 100%; display: flex; justify-content: space-between; align-items: center; margin-top: 26px; }
-  .connect-card > .virtual-button { justify-content: center; margin-top: 10px; }
   .connect-card p { margin: 13px 0 0; font-size: .72rem; text-align: center; }
   .secondary { color: #d8dcda; background: transparent; border: 1px solid #42494d; }
   section + section { margin-top: 110px; }

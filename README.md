@@ -10,7 +10,6 @@ A local-first browser companion for the DEF CON 34 badge. It connects directly o
 - Exact pixel preview and protocol-compatible 2,048-byte image upload
 - Per-chunk validation, retry, progress, and clear-image controls
 - Responsive layout for desktop and mobile-sized browsers
-- Browser-local virtual badge for trying the complete workflow without hardware
 
 Images and serial data stay in the browser; the app has no upload service or analytics. The normal interface deliberately excludes firmware flashing, key management, factory commands, and other destructive console operations.
 
@@ -34,8 +33,10 @@ npm run build
 npm run test:e2e
 ```
 
-The browser tests use a simulated badge transport; final hardware compatibility still needs a physical DC34 badge.
+The fast browser tests use a protocol test double. The hosted validation harness runs the real DC34 console image handler and hosted PDDB under Xous:
 
-## Virtual badge
+```sh
+./validation/hosted/run-hosted.sh
+```
 
-Choose **Try virtual badge** to exercise firmware detection, diagnostics, image clearing, and a complete upload without USB hardware. The simulator validates the same chunk indexes and CRC-framed 2,048-byte payload used by the real badge, then renders the reconstructed display image in the connection panel. It models the companion-facing console protocol rather than the Baochip CPU or boot chain.
+See [validation/hosted/README.md](validation/hosted/README.md) for prerequisites and the exact validation boundary. Physical USB behavior and the DC34 vault still require separate validation.

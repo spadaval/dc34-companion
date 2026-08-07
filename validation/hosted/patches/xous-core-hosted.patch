@@ -1,0 +1,106 @@
+diff --git a/services/bao1x-emu/src/keyboard.rs b/services/bao1x-emu/src/keyboard.rs
+index ca95f122d..5937c0c0c 100644
+--- a/services/bao1x-emu/src/keyboard.rs
++++ b/services/bao1x-emu/src/keyboard.rs
+@@ -10,6 +10,44 @@ pub fn start_keyboard_service() {
+     std::thread::spawn(move || {
+         keyboard_bouncer();
+     });
++    if std::env::var_os("XOUS_HOSTED_STDIN").is_some() {
++        std::thread::spawn(stdin_injector);
++    }
++}
++
++/// Hosted-only, machine-driven console input. The target is configurable, but
++/// defaults to the Bao/DC34 shell's existing scalar keypress endpoint.
++fn stdin_injector() {
++    use std::io::Read;
++
++    let xns = xous_names::XousNames::new().unwrap();
++    let server = std::env::var("XOUS_HOSTED_STDIN_SERVER")
++        .unwrap_or_else(|_| "_Bao console application_".to_owned());
++    let conn = xns.request_connection_blocking(&server).unwrap();
++    let opcode = std::env::var("XOUS_HOSTED_STDIN_OPCODE")
++        .ok()
++        .and_then(|value| value.parse::<usize>().ok())
++        .unwrap_or(0);
++    let startup_delay_ms = std::env::var("XOUS_HOSTED_STDIN_DELAY_MS")
++        .ok()
++        .and_then(|value| value.parse::<u64>().ok())
++        .unwrap_or(1_500);
++    let byte_delay_ms = std::env::var("XOUS_HOSTED_STDIN_BYTE_DELAY_MS")
++        .ok()
++        .and_then(|value| value.parse::<u64>().ok())
++        .unwrap_or(5);
++    std::thread::sleep(std::time::Duration::from_millis(startup_delay_ms));
++    for byte in std::io::stdin().lock().bytes() {
++        let Ok(byte) = byte else { break };
++        if byte.is_ascii() {
++            xous::send_message(
++                conn,
++                xous::Message::new_scalar(opcode, byte as usize, 0, 0, 0),
++            )
++            .unwrap();
++            std::thread::sleep(std::time::Duration::from_millis(byte_delay_ms));
++        }
++    }
+ }
+ 
+ fn keyboard_bouncer() {
+diff --git a/services/pddb/src/main.rs b/services/pddb/src/main.rs
+index b3cf98c93..7cb78099f 100644
+--- a/services/pddb/src/main.rs
++++ b/services/pddb/src/main.rs
+@@ -814,7 +814,11 @@ fn wrapped_main() -> ! {
+                         }
+                     }
+                     let modals = modals::Modals::new(&xns).expect("can't connect to Modals server");
+-                    let fast_format = if cfg!(feature = "oem-baosec-lite") { true } else { false };
++                    // Hosted emulation has no physical flash to securely erase and may run without a
++                    // display. Use the backend's fast format and suppress modal progress so mounting
++                    // can complete in a headless process.
++                    let fast_format = cfg!(feature = "oem-baosec-lite") || cfg!(feature = "hosted-baosec");
++                    let format_progress = if cfg!(feature = "hosted-baosec") { None } else { Some(&modals) };
+                     match pddb_os.ensure_password() {
+                         PasswordState::Correct => {
+                             // The behavior in gen2 is mount-or-format: no user approval
+@@ -823,7 +827,7 @@ fn wrapped_main() -> ! {
+                             if !try_mount(&mut pddb_os, &mut basis_cache, &mut basis_monitor_notifications) {
+                                 log::warn!("PDDB not formatted - formatting the PDDB!");
+                                 pddb_os
+-                                    .pddb_format(fast_format, Some(&modals))
++                                    .pddb_format(fast_format, format_progress)
+                                     .expect("couldn't format PDDB");
+                                 if !try_mount(
+                                     &mut pddb_os,
+@@ -836,7 +840,7 @@ fn wrapped_main() -> ! {
+                         }
+                         PasswordState::Uninit => {
+                             log::warn!("PDDB not formatted - formatting the PDDB!");
+-                            pddb_os.pddb_format(fast_format, Some(&modals)).expect("couldn't format PDDB");
++                            pddb_os.pddb_format(fast_format, format_progress).expect("couldn't format PDDB");
+                             if !try_mount(&mut pddb_os, &mut basis_cache, &mut basis_monitor_notifications) {
+                                 panic!("Couldn't format & mount PDDB");
+                             }
+@@ -846,7 +850,7 @@ fn wrapped_main() -> ! {
+                         }
+                         PasswordState::Incorrect(_failcount) => {
+                             log::warn!("PDDB formatted, but keys rotated. Formatting PDDB!");
+-                            pddb_os.pddb_format(fast_format, Some(&modals)).expect("couldn't format PDDB");
++                            pddb_os.pddb_format(fast_format, format_progress).expect("couldn't format PDDB");
+                             if !try_mount(&mut pddb_os, &mut basis_cache, &mut basis_monitor_notifications) {
+                                 panic!("Couldn't format & mount PDDB");
+                             }
+diff --git a/xtask/src/main.rs b/xtask/src/main.rs
+index d7758aac6..c1e1e1bf9 100644
+--- a/xtask/src/main.rs
++++ b/xtask/src/main.rs
+@@ -359,7 +359,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
+                 "xous-names",
+                 "usb-bao1x",
+                 "bao1x-emu",
+-                "bao-console",
++                // The hosted DC34 spike supplies the real console as an external binary.
+                 "modals",
+                 "pddb",
+                 "bao-video",

@@ -1,0 +1,293 @@
+diff --git a/Cargo.toml b/Cargo.toml
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -18,7 +18,7 @@ bao1x-hal = { features = [
+ bao1x-api = { git = "https://github.com/betrusted-io/xous-core", rev = "616bf65f6e379165464f50b1e79ec42aff77a683" }
+ bao1x-hal-service = { optional = true, git = "https://github.com/betrusted-io/xous-core", rev = "616bf65f6e379165464f50b1e79ec42aff77a683" }
+ bao1x-emu = { optional = true, git = "https://github.com/betrusted-io/xous-core", rev = "616bf65f6e379165464f50b1e79ec42aff77a683" }
+-usb-bao1x = { git = "https://github.com/betrusted-io/xous-core", rev = "616bf65f6e379165464f50b1e79ec42aff77a683", features = ["bao1x", "board-baosec", "oem-baosec-lite"] }
++usb-bao1x = { git = "https://github.com/betrusted-io/xous-core", rev = "616bf65f6e379165464f50b1e79ec42aff77a683" }
+ modals = { default-features = false, optional = true, git = "https://github.com/betrusted-io/xous-core", rev = "616bf65f6e379165464f50b1e79ec42aff77a683" }
+ ux-api = { optional = true, git = "https://github.com/betrusted-io/xous-core", rev = "616bf65f6e379165464f50b1e79ec42aff77a683" }
+ pddb = { optional = true, git = "https://github.com/betrusted-io/xous-core", rev = "616bf65f6e379165464f50b1e79ec42aff77a683" }
+@@ -30,7 +30,7 @@ rkyv = { version = "0.8.8", default-features = false, features = [
+     "std",
+     "alloc",
+ ] }
+-dc34-api = { path = "../dc34-api/" }
++dc34-api = { path = "../../../dc34-api/" }
+ base64 = { version = "0.22.1", default-features = false, features = ["alloc"] }
+ crc32fast = "1.5.0"
+ 
+@@ -62,18 +62,21 @@ git = "https://github.com/betrusted-io/xous-core"
+ rev = "616bf65f6e379165464f50b1e79ec42aff77a683"
+ 
+ [patch."https://github.com/betrusted-io/xous-core"]
+-bao1x-hal = { path = "../xous-core/libs/bao1x-hal" }
+-bao1x-hal-service = { path = "../xous-core/services/bao1x-hal-service" }
+-bao1x-api = { path = "../xous-core/libs/bao1x-api" }
+-modals = { path = "../xous-core/services/modals" }
+-ux-api = { path = "../xous-core/libs/ux-api" }
+-bio-lib = { path = "../xous-core/libs/bio-lib" }
+-xous-api-susres = { path = "../xous-core/api/xous-api-susres" }
+-keystore = {path = "../xous-core/services/keystore" }
+-usb-bao1x = { path = "../xous-core/services/usb-bao1x" }
++bao1x-hal = { path = "../../libs/bao1x-hal" }
++bao1x-hal-service = { path = "../../services/bao1x-hal-service" }
++bao1x-api = { path = "../../libs/bao1x-api" }
++modals = { path = "../../services/modals" }
++ux-api = { path = "../../libs/ux-api" }
++bio-lib = { path = "../../libs/bio-lib" }
++xous-api-susres = { path = "../../api/xous-api-susres" }
++keystore = {path = "../../services/keystore" }
++usb-bao1x = { path = "../../services/usb-bao1x" }
++pddb = { path = "../../services/pddb" }
++bao1x-emu = { path = "../../services/bao1x-emu" }
++xous-swapper = { path = "../../services/xous-swapper" }
+ 
+ [patch.crates-io.aes]
+-path = "../xous-core/services/aes"
++path = "../../services/aes"
+ 
+ [profile.release]
+ codegen-units = 1  # 1 better optimizations
+@@ -107,7 +110,7 @@ hosted-baosec = [
+     "pddb/hosted-baosec",
+     "bao1x-hal/hosted-baosec",
+ ]
+-owc-test = ["keystore/owc-inc"]
++owc-test = []
+ # stress test for WFI resume
+ wfi-stress-test = []
+ # gate for misc test routines
+@@ -119,8 +122,8 @@ hazardous-test = []
+ 
+ # these flags are for factory only builds
+ # owc-inc is necessary because we use a OWC to disable the factory cheat routine after run-once.
+-factory-mismatch = ["keystore/owc-inc"]
+-factory-wipe = ["keystore/owc-inc"]
++factory-mismatch = []
++factory-wipe = []
+ 
+ uber = []
+ 
+@@ -130,3 +133,5 @@ uber = []
+ duart-debug-hal = ["bao1x-hal/debug-print-duart"]
+ 
+ default = ["oem-baosec-lite"]
++
++[workspace]
+diff --git a/src/main.rs b/src/main.rs
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -2,23 +2,28 @@ use std::sync::{
+     Arc,
+     atomic::{AtomicBool, Ordering},
+ };
++#[cfg(not(feature = "hosted-baosec"))]
+ mod bio;
+ mod cmds;
+ mod repl;
+ mod shell;
+ use cmds::*;
+ // mod fxcore;
++#[cfg(not(feature = "hosted-baosec"))]
+ mod leds;
++#[cfg(not(feature = "hosted-baosec"))]
+ mod power;
+ 
+ // .\baosign.ps1 -Config baosec-lite -Target bunnie@10.0.245.164:code/testjig/images/
+ 
+ fn main() {
+     // first thing: initialize the WDT
++    #[cfg(not(feature = "hosted-baosec"))]
+     let mut wdt = bao1x_hal::wdt::Wdt::new();
+     // set for nominally 20 seconds to WDT reset - assuming 50 MHz pclk on boot
+     // this is "properly" set later on once the system has fully booted and
+     // the clock manager is queryable
++    #[cfg(not(feature = "hosted-baosec"))]
+     wdt.enable((50_000_000 / 2) * 20, true);
+ 
+     log_server::init_wait().unwrap();
+@@ -32,8 +37,11 @@ fn main() {
+ 
+     shell::start_shell();
+ 
+-    tt.sleep_ms(500).ok();
+-    leds::start_leds();
++    #[cfg(not(feature = "hosted-baosec"))]
++    {
++        tt.sleep_ms(500).ok();
++        leds::start_leds();
++    }
+ 
+     let run_led_fade = Arc::new(AtomicBool::new(false));
+     let plugged_in = Arc::new(AtomicBool::new(false));
+@@ -41,6 +49,7 @@ fn main() {
+     let usb = usb_bao1x::UsbHid::new();
+     usb.serial_console_input_injection();
+ 
++    #[cfg(not(feature = "hosted-baosec"))]
+     std::thread::spawn({
+         let run_led_fade = run_led_fade.clone();
+         let plugged_in = plugged_in.clone();
+@@ -105,7 +114,9 @@ fn main() {
+     // attempting to see if threading the power manager improves stability
+     // safety: the wdt object is "retired" after this call, so there are no concurrency
+     // issues, and the wdt memory address range is guaranteed to be correct and defined
++    #[cfg(not(feature = "hosted-baosec"))]
+     let wdt_addr = unsafe { wdt.to_raw() };
++    #[cfg(not(feature = "hosted-baosec"))]
+     std::thread::spawn({
+         move || {
+             power::power_manager(run_led_fade, plugged_in, wdt_addr);
+diff --git a/src/cmds.rs b/src/cmds.rs
+--- a/src/cmds.rs
++++ b/src/cmds.rs
+@@ -2,6 +2,9 @@ use alloc::string::String;
+ use std::collections::HashMap;
+ 
+ use String;
++#[cfg(feature = "hosted-baosec")]
++use bao1x_emu::trng;
++#[cfg(not(feature = "hosted-baosec"))]
+ use bao1x_hal_service::trng;
+ use xous::MessageEnvelope;
+ 
+@@ -80,7 +83,9 @@ mod test;
+ use test::*;
+ mod image;
+ use image::*;
++#[cfg(not(feature = "hosted-baosec"))]
+ mod bio;
++#[cfg(not(feature = "hosted-baosec"))]
+ use bio::*;
+ 
+ pub struct CmdEnv {
+@@ -89,6 +94,7 @@ pub struct CmdEnv {
+     ///// 2. declare storage for your command here.
+     image: Image,
+     test: Test,
++    #[cfg(not(feature = "hosted-baosec"))]
+     bio: BioLoader,
+ }
+ impl CmdEnv {
+@@ -108,6 +114,7 @@ impl CmdEnv {
+             ///// 3. initialize your storage, by calling new()
+             image: Image::new(),
+             test: Test::new(),
++            #[cfg(not(feature = "hosted-baosec"))]
+             bio: BioLoader::new(),
+         }
+     }
+@@ -128,6 +135,7 @@ impl CmdEnv {
+             &mut ver_cmd,
+             &mut self.test,
+             &mut self.image,
++            #[cfg(not(feature = "hosted-baosec"))]
+             &mut self.bio,
+         ];
+ 
+diff --git a/src/cmds/test.rs b/src/cmds/test.rs
+--- a/src/cmds/test.rs
++++ b/src/cmds/test.rs
+@@ -8,6 +8,7 @@ use crate::*;
+ 
+ #[derive(Debug)]
+ pub struct Test {
++    #[cfg(not(feature = "hosted-baosec"))]
+     pwr_mgr: xous::CID,
+     #[cfg(feature = "qa-test")]
+     mutation_rate: u8,
+@@ -16,6 +17,7 @@ impl Test {
+     pub fn new() -> Self {
+         let xns = xous_names::XousNames::new().unwrap();
+         Self {
++            #[cfg(not(feature = "hosted-baosec"))]
+             pwr_mgr: xns.request_connection_blocking(POWER_MANAGER_SERVER).unwrap(),
+             #[cfg(feature = "qa-test")]
+             mutation_rate: 1,
+@@ -101,6 +103,7 @@ impl<'a> ShellCmdApi<'a> for Test {
+                 axp2101.powerdown(&mut i2c).ok();
+                 log::info!("sent shutdown to axp2101");
+             }
++            #[cfg(not(feature = "hosted-baosec"))]
+             "wfi" => {
+                 xous::send_message(
+                     self.pwr_mgr,
+@@ -108,6 +111,7 @@ impl<'a> ShellCmdApi<'a> for Test {
+                 )
+                 .ok();
+             }
++            #[cfg(not(feature = "hosted-baosec"))]
+             "deep" => {
+                 xous::send_message(
+                     self.pwr_mgr,
+@@ -273,6 +277,7 @@ impl<'a> ShellCmdApi<'a> for Test {
+                     }*/
+                 }
+             }
++            #[cfg(not(feature = "hosted-baosec"))]
+             "temp" => {
+                 let adc = bao1x_hal_service::Adc::new();
+                 let raw_temp = adc.read_raw(bao1x_hal::udma::AdcSource::Temperature, Some(8));
+diff --git a/src/cmds/image.rs b/src/cmds/image.rs
+--- a/src/cmds/image.rs
++++ b/src/cmds/image.rs
+@@ -16,7 +16,7 @@
+ // CRC-32 is implemented inline (no external crate needed).
+ 
+ use core::fmt::Write;
+-use std::io::Write as FsWrite;
++use std::io::{Read as FsRead, Write as FsWrite};
+ 
+ use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
+ use dc34_api::{DC34_DICT, DC34_IMAGE};
+@@ -49,8 +49,13 @@ pub struct Image {
+     pddb: Pddb,
+ }
+ 
+-impl Image {
+-    pub fn new() -> Self { Image { chunks: vec![None; NUM_CHUNKS], received_count: 0, pddb: Pddb::new() } }
++impl Image {
++    pub fn new() -> Self {
++        let pddb = Pddb::new();
++        #[cfg(feature = "hosted-baosec")]
++        pddb.try_mount();
++        Image { chunks: vec![None; NUM_CHUNKS], received_count: 0, pddb }
++    }
+ 
+     /// Return true when every chunk slot is filled.
+     pub fn is_complete(&self) -> bool { self.received_count == NUM_CHUNKS }
+@@ -85,9 +90,28 @@ impl<'a> ShellCmdApi<'a> for Image {
+ impl<'a> ShellCmdApi<'a> for Image {
+     cmd_api!(image);
+ 
+-    fn process(&mut self, args: String, _env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
+-        let mut ret = String::new();
+-        if args == "clear" {
++    fn process(&mut self, args: String, _env: &mut CommonEnv) -> Result<Option<String>, xous::Error> {
++        let mut ret = String::new();
++        #[cfg(feature = "hosted-baosec")]
++        if args == "verify" {
++            let mut image_key = self
++                .pddb
++                .get(DC34_DICT, DC34_IMAGE, None, false, false, None, None::<fn()>)
++                .expect("couldn't reopen hosted PDDB image key");
++            let mut bytes = [0u8; BITMAP_WORDS * 4];
++            image_key.read_exact(&mut bytes).expect("couldn't read hosted PDDB image key");
++            write!(
++                ret,
++                "VERIFY len={} crc32={:08x} first={:02x?} last={:02x?}",
++                bytes.len(),
++                crc32fast::hash(&bytes),
++                &bytes[..8],
++                &bytes[bytes.len() - 8..]
++            )
++            .unwrap();
++            return Ok(Some(ret));
++        }
++        if args == "clear" {
+             self.clear();
+             self.pddb.delete_key(DC34_DICT, DC34_IMAGE, None).ok();
+             // trigger a reload using monkey-patched opcode

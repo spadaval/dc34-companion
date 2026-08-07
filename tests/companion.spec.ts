@@ -9,6 +9,7 @@ async function installFakeBadge(page: import('@playwright/test').Page): Promise<
     const writable = new WritableStream<Uint8Array>({
       write(bytes) {
         const command = new TextDecoder().decode(bytes).replace(/^\x08+/, '').trim();
+        if (!command) return;
         controller.enqueue(encoder.encode(`[console] ${command}\n`));
         if (command === 'ver xous') controller.enqueue(encoder.encode('Xous version: test-1.0\n'));
         else if (command.startsWith('echo ')) controller.enqueue(encoder.encode(`${command.slice(5)}\n`));

@@ -51,6 +51,8 @@ const DEFAULT_TIMEOUT_MS = 4_000;
 const DEFAULT_MAX_RETRIES = 4;
 const DEFAULT_RETRY_DELAY_MS = 500;
 const CONSOLE_CLEAR_CHARACTERS = 64;
+const CONSOLE_CLEAR_BATCH_SIZE = 8;
+const CONSOLE_CLEAR_BATCH_DELAY_MS = 10;
 
 /** A single-owner, transport-neutral line protocol session. */
 export class BadgeSession {
@@ -163,7 +165,14 @@ export class BadgeSession {
 	}
 
 	private async writeCommand(command: string, signal?: AbortSignal): Promise<void> {
-		await this.transport.write(encoder.encode(`${'\b'.repeat(CONSOLE_CLEAR_CHARACTERS)}${command}\n`), signal);
+		const clearBatch = encoder.encode('\b'.repeat(CONSOLE_CLEAR_BATCH_SIZE));
+		for (let sent = 0; sent < CONSOLE_CLEAR_CHARACTERS; sent += CONSOLE_CLEAR_BATCH_SIZE) {
+			await this.transport.write(clearBatch, signal);
+			// Serial input is forwarded as individual Xous keyboard messages. Give the
+			// console time to drain each batch before adding more events to its queue.
+			await delay(CONSOLE_CLEAR_BATCH_DELAY_MS, signal);
+		}
+		await this.transport.write(encoder.encode(`${command}\n`), signal);
 	}
 
 	private async enqueue<T>(operation: () => Promise<T>): Promise<T> {

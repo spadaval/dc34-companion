@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { FakeBadgeTransport } from './fake-transport';
 import { BadgeProtocolError, BadgeSession } from './transport';
 
-const clearedCommand = (command: string) => `${'\b'.repeat(64)}${command}\n`;
+const clearBatches = Array.from({ length: 8 }, () => '\b'.repeat(8));
+const commandWrites = (command: string) => [...clearBatches, `${command}\n`];
 
 describe('FakeBadgeTransport with BadgeSession', () => {
 	it('ignores echoes and logs before accepting a response', async () => {
@@ -15,7 +16,7 @@ describe('FakeBadgeTransport with BadgeSession', () => {
 			response: { kind: 'clear' },
 			attempt: 0
 		});
-		expect(new TextDecoder().decode(transport.writes[0])).toBe(clearedCommand('image clear'));
+		expect(transport.writes.map((bytes) => new TextDecoder().decode(bytes))).toEqual(commandWrites('image clear'));
 	});
 
 	it('retries a rejected transaction and preserves command framing', async () => {
@@ -28,8 +29,8 @@ describe('FakeBadgeTransport with BadgeSession', () => {
 			attempt: 1
 		});
 		expect(transport.writes.map((bytes) => new TextDecoder().decode(bytes))).toEqual([
-			clearedCommand('ver'),
-			clearedCommand('ver')
+			...commandWrites('ver'),
+			...commandWrites('ver')
 		]);
 	});
 
@@ -42,7 +43,7 @@ describe('FakeBadgeTransport with BadgeSession', () => {
 			'[console] echo hello',
 			'hello'
 		]);
-		expect(new TextDecoder().decode(transport.writes[0])).toBe(clearedCommand('echo hello'));
+		expect(transport.writes.map((bytes) => new TextDecoder().decode(bytes))).toEqual(commandWrites('echo hello'));
 	});
 
 	it('rejects multiline console input', async () => {

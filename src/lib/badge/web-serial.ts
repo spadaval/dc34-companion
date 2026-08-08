@@ -15,7 +15,7 @@ interface BrowserSerialApis {
 }
 
 interface WebUsbDeviceApi {
-  requestDevice(options: { filters: Array<{ vendorId: number; productId: number }> }): Promise<unknown>;
+  requestDevice(options: { filters: Array<{ vendorId: number }> }): Promise<unknown>;
 }
 
 export function browserSerialMode(apis: BrowserSerialApis): BrowserSerialMode | null {
@@ -63,14 +63,14 @@ export class WebSerialTransport implements BadgeTransport {
     if (this.#mode === 'web-serial') {
       if (!navigator.serial) throw new Error('Could not initialize Web Serial.');
       port = await navigator.serial.requestPort({
-        filters: [{ usbVendorId: 0x1d50, usbProductId: 0x6198 }]
+        filters: [{ usbVendorId: 0x1d50 }]
       });
     } else {
       const usb = navigator.usb as WebUsbDeviceApi;
       const device = await usb.requestDevice({
         // Deliberately omit classCode: Android may not match the CDC interface
         // nested behind the badge's composite FIDO + keyboard descriptors.
-        filters: [{ vendorId: 0x1d50, productId: 0x6198 }]
+        filters: [{ vendorId: 0x1d50 }]
       });
       const { SerialPort: WebUsbSerialPort } = await import('web-serial-polyfill');
       port = new WebUsbSerialPort(device as never) as unknown as SerialPort;

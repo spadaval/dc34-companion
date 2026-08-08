@@ -37,7 +37,7 @@ describe('browserSerialMode', () => {
 		expect(browserSerialMode({})).toBeNull();
 	});
 
-	it('filters the device picker to the BaoSec badge USB identity', async () => {
+	it('filters the device picker only by the Baochip vendor ID', async () => {
 		const port = {
 			readable: null,
 			writable: null,
@@ -54,12 +54,12 @@ describe('browserSerialMode', () => {
 		await transport.connect();
 
 		expect(requestPort).toHaveBeenCalledWith({
-			filters: [{ usbVendorId: 0x1d50, usbProductId: 0x6198 }]
+			filters: [{ usbVendorId: 0x1d50 }]
 		});
 		await transport.close();
 	});
 
-	it('requests the Android WebUSB device by VID/PID without an interface class filter', async () => {
+	it('requests the Android WebUSB device by vendor without product or interface filters', async () => {
 		const device = { productName: 'Baosec-lite' };
 		const requestDevice = vi.fn(async () => device);
 		Object.defineProperty(globalThis, 'navigator', {
@@ -71,7 +71,7 @@ describe('browserSerialMode', () => {
 		await transport.connect();
 
 		expect(requestDevice).toHaveBeenCalledWith({
-			filters: [{ vendorId: 0x1d50, productId: 0x6198 }]
+			filters: [{ vendorId: 0x1d50 }]
 		});
 		expect(polyfillState.devices).toEqual([device]);
 		await transport.close();

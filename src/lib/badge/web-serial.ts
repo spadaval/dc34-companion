@@ -14,6 +14,10 @@ interface BrowserSerialApis {
   usb?: unknown;
 }
 
+interface WebUsbDeviceApi {
+  requestDevice(options: { filters: Array<{ vendorId: number; productId: number }> }): Promise<unknown>;
+}
+
 export function browserSerialMode(apis: BrowserSerialApis): BrowserSerialMode | null {
   if (apis.serial) return 'web-serial';
   if (apis.usb) return 'web-usb';
@@ -55,12 +59,22 @@ export class WebSerialTransport implements BadgeTransport {
 
     this.#mode = browserSerialMode(navigator);
     if (!this.#mode) throw new Error('This browser does not provide Web Serial or WebUSB.');
-    const serialApi = this.#mode === 'web-serial'
-      ? navigator.serial
-      : (await import('web-serial-polyfill')).serial as unknown as Serial;
-    if (!serialApi) throw new Error('Could not initialize the browser serial transport.');
-
-    const port = await serialApi.requestPort({ filters: [{ usbVendorId: 0x1d50, usbProductId: 0x6198 }] });
+    let port: SerialPort;
+    if (this.#mode === 'web-serial') {
+      if (!navigator.serial) throw new Error('Could not initialize Web Serial.');
+      port = await navigator.serial.requestPort({
+        filters: [{ usbVendorId: 0x1d50, usbProductId: 0x6198 }]
+      });
+    } else {
+      const usb = navigator.usb as WebUsbDeviceApi;
+      const device = await usb.requestDevice({
+        // Deliberately omit classCode: Android may not match the CDC interface
+        // nested behind the badge's composite FIDO + keyboard descriptors.
+        filters: [{ vendorId: 0x1d50, productId: 0x6198 }]
+      });
+      const { SerialPort: WebUsbSerialPort } = await import('web-serial-polyfill');
+      port = new WebUsbSerialPort(device as never) as unknown as SerialPort;
+    }
     await port.open({ baudRate: 1_000_000, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' });
     this.#port = port;
     this.#readTask = this.#readLoop(port);

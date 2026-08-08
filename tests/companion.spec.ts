@@ -46,7 +46,7 @@ test('connects, reads diagnostics, prepares an image, and uploads it', async ({ 
   await expect(page.getByRole('tabpanel', { name: 'Image' }).getByText('Image uploaded. It will alternate with the DEF CON logo.')).toBeVisible({ timeout: 12_000 });
   await expect(page.getByText('Transfer console')).toBeVisible();
   await expect(page.locator('.transfer-console pre')).toContainText('SUCCESS');
-  await page.getByRole('button', { name: 'Clear', exact: true }).click();
+  await page.getByRole('button', { name: 'Clear badge', exact: true }).click();
   await expect(page.getByRole('tabpanel', { name: 'Image' }).getByText('Custom image cleared from the badge.')).toBeVisible();
 
   await page.getByRole('tab', { name: 'Diagnostics' }).click();
@@ -57,6 +57,24 @@ test('connects, reads diagnostics, prepares an image, and uploads it', async ({ 
   await page.getByLabel('Command').fill('echo hello');
   await page.getByRole('button', { name: 'Send' }).click();
   await expect(page.getByRole('tabpanel', { name: 'Console' }).locator('pre')).toContainText('hello');
+});
+
+test('starts with a default image and supports removing and loading one by URL', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByText('2,048 bytes ready', { exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Remove image' }).click();
+  await expect(page.getByText('No image', { exact: true })).toBeVisible();
+
+  const image = await page.screenshot();
+  await page.route('https://example.test/badge.png', (route) => route.fulfill({
+    body: image,
+    contentType: 'image/png'
+  }));
+  await page.getByLabel('Image URL').fill('https://example.test/badge.png');
+  await page.getByRole('button', { name: 'Load image' }).click();
+  await expect(page.getByText('2,048 bytes ready', { exact: true })).toBeVisible();
+  await expect(page.getByText('badge.png', { exact: true })).toBeVisible();
 });
 
 test('offers WebUSB when native Web Serial is unavailable', async ({ page }) => {

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import {
     convertToBadgeImage,
     type BadgeImage,
@@ -19,8 +20,14 @@
   let threshold = $state(128);
   let dither: DitherMode = $state('floyd-steinberg');
   let error = $state('');
+  let imageUrl = $state('');
+  let loadingUrl = $state(false);
   let drag: { x: number; y: number; cropX: number; cropY: number } | null = null;
   let display = { scale: 1, offsetX: 0, offsetY: 0 };
+
+  onMount(() => {
+    void loadDefaultImage();
+  });
 
   $effect(() => {
     source;
@@ -48,42 +55,113 @@
     const file = input.files?.[0];
     if (!file) return;
     try {
-      if (file.size > 20 * 1024 * 1024) throw new Error('Choose an image smaller than 20 MB.');
-      sourceBitmap?.close();
-      const bitmap = await createImageBitmap(file);
-      if (bitmap.width * bitmap.height > 40_000_000) {
-        bitmap.close();
-        throw new Error('Choose an image smaller than 40 megapixels.');
-      }
-      const canvas = document.createElement('canvas');
-      canvas.width = bitmap.width;
-      canvas.height = bitmap.height;
-      const context = canvas.getContext('2d', { willReadFrequently: true });
-      if (!context) throw new Error('Canvas is unavailable in this browser.');
-      context.drawImage(bitmap, 0, 0);
-      const rgba = context.getImageData(0, 0, bitmap.width, bitmap.height).data;
-      const pixels = new Uint8Array(bitmap.width * bitmap.height);
-      for (let index = 0; index < pixels.length; index += 1) {
-        const offset = index * 4;
-        const alpha = rgba[offset + 3] / 255;
-        const luminance = rgba[offset] * 0.2126 + rgba[offset + 1] * 0.7152 + rgba[offset + 2] * 0.0722;
-        pixels[index] = Math.round(luminance * alpha + 255 * (1 - alpha));
-      }
-      sourceBitmap = bitmap;
-      source = { width: bitmap.width, height: bitmap.height, pixels };
-      filename = file.name;
-      zoom = 0;
-      const size = Math.min(bitmap.width, bitmap.height);
-      crop = { x: (bitmap.width - size) / 2, y: (bitmap.height - size) / 2, size };
-      error = '';
+      await loadImage(file, file.name);
     } catch (cause) {
       error = cause instanceof Error ? cause.message : 'Could not open this image.';
-      source = null;
-      sourceBitmap = null;
-      onready?.(null);
     } finally {
       input.value = '';
     }
+  }
+
+  async function loadImage(blob: Blob, name: string): Promise<void> {
+    if (blob.size > 20 * 1024 * 1024) throw new Error('Choose an image smaller than 20 MB.');
+    let bitmap: ImageBitmap | null = null;
+    try {
+      bitmap = await createImageBitmap(blob);
+      await useBitmap(bitmap, name);
+      bitmap = null;
+    } finally {
+      bitmap?.close();
+    }
+  }
+
+  async function useBitmap(bitmap: ImageBitmap, name: string): Promise<void> {
+    if (bitmap.width * bitmap.height > 40_000_000) {
+      bitmap.close();
+      throw new Error('Choose an image smaller than 40 megapixels.');
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) throw new Error('Canvas is unavailable in this browser.');
+    context.drawImage(bitmap, 0, 0);
+    const rgba = context.getImageData(0, 0, bitmap.width, bitmap.height).data;
+    const pixels = new Uint8Array(bitmap.width * bitmap.height);
+    for (let index = 0; index < pixels.length; index += 1) {
+      const offset = index * 4;
+      const alpha = rgba[offset + 3] / 255;
+      const luminance = rgba[offset] * 0.2126 + rgba[offset + 1] * 0.7152 + rgba[offset + 2] * 0.0722;
+      pixels[index] = Math.round(luminance * alpha + 255 * (1 - alpha));
+    }
+    sourceBitmap?.close();
+    sourceBitmap = bitmap;
+    source = { width: sourceBitmap.width, height: sourceBitmap.height, pixels };
+    filename = name;
+    zoom = 0;
+    const size = Math.min(source.width, source.height);
+    crop = { x: (source.width - size) / 2, y: (source.height - size) / 2, size };
+    error = '';
+  }
+
+  async function loadDefaultImage(): Promise<void> {
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('Canvas is unavailable in this browser.');
+      context.fillStyle = '#fff';
+      context.fillRect(0, 0, 512, 512);
+      context.strokeStyle = '#000';
+      context.lineWidth = 20;
+      context.strokeRect(24, 24, 464, 464);
+      context.fillStyle = '#000';
+      context.textAlign = 'center';
+      context.textBaseline = 'middle';
+      context.font = '900 270px sans-serif';
+      context.fillText('34', 256, 236);
+      context.font = '700 42px monospace';
+      context.fillText('DC34', 256, 428);
+      await useBitmap(await createImageBitmap(canvas), 'DC34 default');
+    } catch (cause) {
+      error = cause instanceof Error ? cause.message : 'Could not load the default image.';
+    }
+  }
+
+  async function loadImageUrl(event: SubmitEvent): Promise<void> {
+    event.preventDefault();
+    if (!imageUrl.trim() || loadingUrl) return;
+    loadingUrl = true;
+    try {
+      const url = new URL(imageUrl);
+      if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new Error('Enter an HTTP or HTTPS image URL.');
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`Image request failed (${response.status}).`);
+      const blob = await response.blob();
+      if (blob.type && !blob.type.startsWith('image/')) throw new Error('That URL did not return an image.');
+      const name = decodeURIComponent(url.pathname.split('/').filter(Boolean).pop() ?? url.hostname);
+      await loadImage(blob, name);
+      imageUrl = '';
+    } catch (cause) {
+      error = cause instanceof TypeError
+        ? 'Could not fetch that image. The host may block cross-origin requests.'
+        : cause instanceof Error ? cause.message : 'Could not load that image URL.';
+    } finally {
+      loadingUrl = false;
+    }
+  }
+
+  function removeImage(): void {
+    sourceBitmap?.close();
+    sourceBitmap = null;
+    source = null;
+    filename = '';
+    zoom = 0;
+    crop = { x: 0, y: 0, size: 1 };
+    error = '';
+    outputCanvas?.getContext('2d')?.clearRect(0, 0, outputCanvas.width, outputCanvas.height);
+    onready?.(null);
   }
 
   function updateZoom(next: number): void {
@@ -189,6 +267,10 @@
         <input class="sr-only" type="file" accept="image/*" onchange={chooseFile} />
       </label>
     {/if}
+    <form class="url-loader" onsubmit={loadImageUrl}>
+      <label for="image-url">Image URL</label>
+      <div><input id="image-url" type="url" bind:value={imageUrl} placeholder="https://…" disabled={loadingUrl} /><button type="submit" disabled={!imageUrl.trim() || loadingUrl}>{loadingUrl ? 'Loading…' : 'Load image'}</button></div>
+    </form>
   </div>
 
   <div class="controls-column">
@@ -219,7 +301,13 @@
       <label class="radio"><input type="radio" bind:group={dither} value="threshold" /> Hard threshold</label>
     </fieldset>
     {#if source}
-      <label class="replace">Choose another image<input class="sr-only" type="file" accept="image/*" onchange={chooseFile} /></label>
+      <div class="source-actions">
+        <label class="replace">Choose another<input class="sr-only" type="file" accept="image/*" onchange={chooseFile} /></label>
+        <button type="button" class="text-button" onclick={removeImage}>Remove image</button>
+        <button type="button" class="text-button" onclick={loadDefaultImage}>Use default</button>
+      </div>
+    {:else}
+      <button type="button" class="text-button default-button" onclick={loadDefaultImage}>Use default image</button>
     {/if}
   </div>
 
@@ -245,6 +333,11 @@
   .upload-icon { display: grid; place-items: center; width: 48px; aspect-ratio: 1; margin-bottom: 8px; color: var(--acid); border: 1px solid #3b4430; font-size: 1.5rem; }
   .drop-zone small, .preview-column > small { color: var(--muted); font: 650 9px/1.4 ui-monospace, monospace; letter-spacing: .1em; }
   .filename { display: block; margin-top: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .78rem; }
+  .url-loader { display: grid; gap: 8px; margin-top: 16px; }
+  .url-loader > label { color: #b8bdba; font-size: .72rem; }
+  .url-loader > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+  .url-loader input { min-width: 0; height: 42px; padding: 0 12px; color: #edf0e9; border: 1px solid #343a3e; background: #080a0b; font: 12px/1 ui-monospace, monospace; }
+  .url-loader button { min-height: 42px; }
   .controls-column { display: grid; gap: 20px; }
   .controls-column > label { display: grid; grid-template-columns: 1fr auto; gap: 10px; color: #b8bdba; font-size: .78rem; }
   output { color: var(--acid); font-family: ui-monospace, monospace; }
@@ -252,7 +345,10 @@
   fieldset { display: flex; flex-wrap: wrap; gap: 14px; padding: 0; border: 0; }
   legend { margin-bottom: 12px; color: #b8bdba; font-size: .78rem; }
   .radio { font-size: .76rem; color: var(--muted); }
-  .replace { display: inline-block !important; color: var(--acid) !important; text-decoration: underline; cursor: pointer; }
+  .source-actions { display: flex; flex-wrap: wrap; gap: 12px 18px; }
+  .replace, .text-button { display: inline-block !important; min-height: auto; padding: 0; color: var(--acid) !important; background: transparent; font-size: .76rem; text-decoration: underline; cursor: pointer; }
+  .text-button { border: 0; }
+  .default-button { justify-self: start; }
   .preview-column { text-align: center; }
   .preview-column .canvas-label { justify-content: center; }
   .device-frame { width: min(100%, 260px); aspect-ratio: 1; margin: 0 auto 20px; padding: 14px; background: #252a2c; box-shadow: 14px 16px 0 #050607; }

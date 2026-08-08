@@ -1,7 +1,7 @@
 ---
 strategy: dc34-companion
 mission: build-browser-companion
-revision: 6
+revision: 7
 status: active
 sources:
   - README.md
@@ -21,7 +21,7 @@ Attendees can connect a DC34 badge from a supported browser, inspect a small set
 - A lightweight in-process transport double used only for fast UI tests.
 - A hosted-Xous validation harness that executes the actual DC34 console, image receiver, and hosted PDDB implementations. Running the actual DC34 vault remains a separate validation milestone.
 - A single-owner, line-oriented serial session that tolerates command echo and unrelated log output.
-- Browser-local image processing: interactive square crop, zoom, threshold or Floyd–Steinberg dithering, exact wire-format preview, and chunked upload.
+- Browser-local image sourcing and processing: a built-in default, local files, CORS-permitted HTTP image URLs, explicit source removal, interactive square crop, zoom, threshold or Floyd–Steinberg dithering, exact wire-format preview, and chunked upload.
 - A diagnostics surface plus an explicitly labeled raw console for user-directed badge commands.
 
 # Governing Decisions
@@ -81,3 +81,4 @@ Attendees can connect a DC34 badge from a supported browser, inspect a small set
 - Revision 4: User-directed UX rework replaces the landing-page layout with persistent status, task tabs, and a connection modal while retaining the existing workflows.
 - Revision 5: User-directed expansion adds a raw interactive console, full diagnostic refresh, pre-command input clearing, and live image-transfer output.
 - Revision 6: User-directed expansion adds an Android WebUSB CDC-ACM fallback while retaining native Web Serial on desktop. Physical Android-to-badge transfer remains the compatibility gate.
+- Revision 7: User-directed image workflow expansion adds an upload-ready default, explicit editor-source removal, URL loading through browser CORS, and distinct labeling for badge-side clearing.

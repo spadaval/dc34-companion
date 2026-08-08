@@ -7,12 +7,15 @@ A local-first browser companion for the DEF CON 34 badge. It connects directly o
 - Explicit, user-approved serial connection at 1,000,000 baud over desktop Web Serial or Android WebUSB/CDC
 - Firmware version, hardware diagnostics, and manual refresh controls
 - Interactive serial console for direct badge commands
+- Built-in default plus local-file and URL image loading, with explicit source removal
 - Interactive square crop, zoom, positioning, threshold, and Floyd–Steinberg dithering
 - Exact pixel preview and protocol-compatible 2,048-byte image upload
-- Per-chunk validation, retry, live console transcript, and clear-image controls
+- Per-chunk validation, retry, live console transcript, and explicit badge-side clearing
 - Responsive layout for desktop and mobile-sized browsers
 
 Images and serial data stay in the browser; the app has no upload service or analytics. Firmware flashing, key management, and factory operations are not exposed as first-class workflows. The raw console is intended for expert use and warns that commands may change stored data.
+
+Images loaded by URL are fetched directly by the browser. The image host must permit cross-origin requests.
 
 ## Browser support
 

@@ -251,7 +251,7 @@
             <strong>{statusMessage}</strong>
           </div>
           <div class="actions">
-            <button class="secondary" type="button" onclick={clearImage} disabled={!connected || actionState === 'working'}>Clear</button>
+            <button class="secondary" type="button" onclick={clearImage} disabled={!connected || actionState === 'working'}>Clear badge</button>
             <button type="button" onclick={uploadImage} disabled={!connected || !badgeImage || actionState === 'working'}>
               {actionState === 'working' ? `${Math.round(progress * 100)}%` : 'Upload to badge'}
             </button>

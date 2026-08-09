@@ -19,12 +19,17 @@ interface WebUsbDeviceApi {
 }
 
 export function browserSerialMode(apis: BrowserSerialApis): BrowserSerialMode | null {
-  if (apis.serial) return 'web-serial';
-  if (apis.usb) return 'web-usb';
-  return null;
+  return browserSerialModes(apis)[0] ?? null;
 }
 
-function modeLabel(mode: BrowserSerialMode | null): string {
+export function browserSerialModes(apis: BrowserSerialApis): BrowserSerialMode[] {
+  const modes: BrowserSerialMode[] = [];
+  if (apis.serial) modes.push('web-serial');
+  if (apis.usb) modes.push('web-usb');
+  return modes;
+}
+
+export function browserSerialModeLabel(mode: BrowserSerialMode | null): string {
   return mode === 'web-serial' ? 'Web Serial' : mode === 'web-usb' ? 'WebUSB · CDC' : 'Unavailable';
 }
 
@@ -36,18 +41,21 @@ export class WebSerialTransport implements BadgeTransport {
   #queue: Uint8Array[] = [];
   #waiters: ReadWaiter[] = [];
 
-  constructor(private readonly onDisconnect?: () => void) {}
+  constructor(
+    private readonly onDisconnect?: () => void,
+    private readonly requestedMode?: BrowserSerialMode
+  ) {}
 
-  static supported(): boolean {
-    return typeof navigator !== 'undefined' && browserSerialMode(navigator) !== null;
+  static availableModes(): BrowserSerialMode[] {
+    return typeof navigator === 'undefined' ? [] : browserSerialModes(navigator);
   }
 
-  static availableName(): string {
-    return typeof navigator === 'undefined' ? 'Unavailable' : modeLabel(browserSerialMode(navigator));
+  static modeName(mode: BrowserSerialMode | null): string {
+    return browserSerialModeLabel(mode);
   }
 
   get name(): string {
-    return modeLabel(this.#mode);
+    return browserSerialModeLabel(this.#mode);
   }
 
   get connected(): boolean {
@@ -57,8 +65,12 @@ export class WebSerialTransport implements BadgeTransport {
   async connect(): Promise<void> {
     if (this.#port) return;
 
-    this.#mode = browserSerialMode(navigator);
+    const availableModes = browserSerialModes(navigator);
+    this.#mode = this.requestedMode ?? availableModes[0] ?? null;
     if (!this.#mode) throw new Error('This browser does not provide Web Serial or WebUSB.');
+    if (!availableModes.includes(this.#mode)) {
+      throw new Error(`${browserSerialModeLabel(this.#mode)} is not available in this browser.`);
+    }
     let port: SerialPort;
     if (this.#mode === 'web-serial') {
       if (!navigator.serial) throw new Error('Could not initialize Web Serial.');

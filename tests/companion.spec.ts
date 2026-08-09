@@ -89,6 +89,23 @@ test('offers WebUSB when native Web Serial is unavailable', async ({ page }) => 
   await expect(page.getByRole('button', { name: 'Connect badge' })).toBeEnabled();
 });
 
+test('allows choosing WebUSB when Web Serial is also available', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'serial', {
+      configurable: true,
+      value: { requestPort: async () => ({}), getPorts: async () => [] }
+    });
+    Object.defineProperty(navigator, 'usb', { configurable: true, value: {} });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: /Not connected/ }).click();
+
+  await expect(page.getByRole('radio', { name: /Web Serial/ })).toBeChecked();
+  await expect(page.getByRole('radio', { name: /WebUSB/ })).toBeVisible();
+  await page.getByRole('radio', { name: /WebUSB/ }).check();
+  await expect(page.getByRole('radio', { name: /WebUSB/ })).toBeChecked();
+});
+
 test('shows useful guidance when browser USB APIs are unavailable', async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(navigator, 'serial', { configurable: true, value: undefined });

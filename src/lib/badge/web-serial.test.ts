@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { browserSerialMode, WebSerialTransport } from './web-serial';
+import { browserSerialMode, browserSerialModes, WebSerialTransport } from './web-serial';
 
 const polyfillState = vi.hoisted(() => ({ devices: [] as unknown[] }));
 
@@ -27,6 +27,7 @@ afterEach(() => {
 describe('browserSerialMode', () => {
 	it('prefers native Web Serial when both APIs exist', () => {
 		expect(browserSerialMode({ serial: {} as Serial, usb: {} })).toBe('web-serial');
+		expect(browserSerialModes({ serial: {} as Serial, usb: {} })).toEqual(['web-serial', 'web-usb']);
 	});
 
 	it('falls back to WebUSB when Web Serial is absent', () => {
@@ -74,6 +75,26 @@ describe('browserSerialMode', () => {
 			filters: [{ vendorId: 0x1d50 }]
 		});
 		expect(polyfillState.devices).toEqual([device]);
+		await transport.close();
+	});
+
+	it('uses an explicitly selected WebUSB transport when Web Serial is also available', async () => {
+		const requestPort = vi.fn();
+		const device = { productName: 'Baosec-lite' };
+		const requestDevice = vi.fn(async () => device);
+		Object.defineProperty(globalThis, 'navigator', {
+			configurable: true,
+			value: {
+				serial: { requestPort, getPorts: async () => [] },
+				usb: { requestDevice }
+			}
+		});
+
+		const transport = new WebSerialTransport(undefined, 'web-usb');
+		await transport.connect();
+
+		expect(requestPort).not.toHaveBeenCalled();
+		expect(requestDevice).toHaveBeenCalledWith({ filters: [{ vendorId: 0x1d50 }] });
 		await transport.close();
 	});
 });

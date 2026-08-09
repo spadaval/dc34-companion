@@ -3,7 +3,7 @@
   import ImageEditor from '$lib/components/ImageEditor.svelte';
   import type { BadgeImage } from '$lib/image/processing';
   import { BadgeSession } from '$lib/badge/transport';
-  import { WebSerialTransport } from '$lib/badge/web-serial';
+  import { WebSerialTransport, type BrowserSerialMode } from '$lib/badge/web-serial';
 
   type ConnectionState = 'unsupported' | 'disconnected' | 'connecting' | 'connected';
   type ActionState = 'idle' | 'working' | 'success' | 'error';
@@ -23,6 +23,8 @@
   let mounted = $state(false);
   let browserSupported = $state(false);
   let transportName = $state('Unavailable');
+  let availableTransports: BrowserSerialMode[] = $state([]);
+  let selectedTransport: BrowserSerialMode | null = $state(null);
   let activeTab: AppTab = $state('image');
   let connectionDialog: HTMLDialogElement;
   let consoleCommand = $state('');
@@ -31,8 +33,10 @@
   let hardwareCheckActive = false;
 
   onMount(() => {
-    browserSupported = WebSerialTransport.supported();
-    transportName = WebSerialTransport.availableName();
+    availableTransports = WebSerialTransport.availableModes();
+    selectedTransport = availableTransports[0] ?? null;
+    browserSupported = availableTransports.length > 0;
+    transportName = WebSerialTransport.modeName(selectedTransport);
     mounted = true;
     if (!browserSupported) {
       connectionState = 'unsupported';
@@ -62,7 +66,7 @@
     connectionState = 'connecting';
     statusMessage = 'Choose the DC34 badge in your browser prompt.';
     try {
-      const nextTransport = new WebSerialTransport(handleUnexpectedDisconnect);
+      const nextTransport = new WebSerialTransport(handleUnexpectedDisconnect, selectedTransport ?? undefined);
       await nextTransport.connect();
       transport = nextTransport;
       transportName = nextTransport.name;
@@ -93,6 +97,11 @@
 
   function openConnectionDialog(): void {
     connectionDialog?.showModal();
+  }
+
+  function selectTransport(mode: BrowserSerialMode): void {
+    selectedTransport = mode;
+    transportName = WebSerialTransport.modeName(mode);
   }
 
   async function readVersion(): Promise<boolean> {
@@ -320,10 +329,27 @@
     <span class:online={connected} class="pulse"></span>
     <div><strong>{connectionLabel}</strong><small>{statusMessage}</small></div>
   </div>
-  <div class="method-row">
-    <div><strong>{transportName}</strong><small>USB · 1,000,000 baud</small></div>
-    <span>{browserSupported ? 'Available' : 'Unavailable'}</span>
-  </div>
+  {#if availableTransports.length}
+    <fieldset class="transport-options" disabled={connected || connectionState === 'connecting'}>
+      <legend>Transport</legend>
+      {#each availableTransports as mode}
+        <label class:selected={selectedTransport === mode} class="method-row">
+          <input
+            type="radio"
+            name="transport"
+            value={mode}
+            checked={selectedTransport === mode}
+            onchange={() => selectTransport(mode)}
+          />
+          <div>
+            <strong>{WebSerialTransport.modeName(mode)}</strong>
+            <small>{mode === 'web-serial' ? 'System serial port' : 'Direct USB CDC fallback'}</small>
+          </div>
+          <span>Available</span>
+        </label>
+      {/each}
+    </fieldset>
+  {/if}
   {#if connectionState === 'unsupported'}
     <p class="support-note">Use current Chrome or Edge on desktop, or Chrome with USB host support on Android.</p>
   {/if}
@@ -402,7 +428,11 @@
   .connection-summary { display: flex; align-items: center; gap: 14px; padding: 24px; }
   .connection-summary div, .method-row div { display: grid; gap: 6px; }
   .connection-summary small, .method-row small { color: var(--muted); line-height: 1.4; }
-  .method-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 0 24px; padding: 16px; border: 1px solid #3a4246; background: #0b0d0f; }
+  .transport-options { display: grid; gap: 8px; margin: 0 24px; padding: 0; border: 0; }
+  .transport-options legend { margin-bottom: 10px; color: var(--muted); font: 700 10px/1 ui-monospace, monospace; text-transform: uppercase; }
+  .method-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 14px; padding: 16px; border: 1px solid #3a4246; background: #0b0d0f; cursor: pointer; }
+  .method-row.selected { border-color: var(--acid); }
+  .method-row input { width: 16px; height: 16px; margin: 0; accent-color: var(--acid); }
   .method-row > span { color: var(--acid); font: 700 9px/1 ui-monospace, monospace; text-transform: uppercase; }
   .support-note { margin: 16px 24px 0; color: var(--muted); font-size: .76rem; line-height: 1.5; }
   .dialog-actions { display: flex; justify-content: flex-end; padding: 24px; }

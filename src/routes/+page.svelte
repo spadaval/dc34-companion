@@ -171,7 +171,7 @@
     progress = 0;
     transferLines = [];
     captureTransfer = true;
-    statusMessage = 'Clearing any partial transfer and uploading 32 chunks…';
+    statusMessage = 'Uploading 32 chunks…';
     try {
       await session.uploadImage(badgeImage.payload, {
         onProgress: (completed, total) => (progress = completed / total)

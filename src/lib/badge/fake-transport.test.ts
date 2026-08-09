@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import { FakeBadgeTransport } from './fake-transport';
+import { IMAGE_BYTES } from './protocol';
 import { BadgeProtocolError, BadgeSession } from './transport';
 
-const clearBatches = Array.from({ length: 8 }, () => '\b'.repeat(8));
-const commandWrites = (command: string) => [...clearBatches, `${command}\n`];
+const commandWrites = (command: string) => [`${command}\n`];
 
 describe('FakeBadgeTransport with BadgeSession', () => {
 	it('ignores echoes and logs before accepting a response', async () => {
@@ -44,6 +44,25 @@ describe('FakeBadgeTransport with BadgeSession', () => {
 			'hello'
 		]);
 		expect(transport.writes.map((bytes) => new TextDecoder().decode(bytes))).toEqual(commandWrites('echo hello'));
+	});
+
+	it('uploads using dc34-image framing without clears or backspaces', async () => {
+		const transport = new FakeBadgeTransport();
+		transport.enqueueText(`ready\nready\nready\n${'OK\n'.repeat(31)}SUCCESS\n`);
+		const session = new BadgeSession(transport);
+
+		await expect(session.uploadImage(new Uint8Array(IMAGE_BYTES), {
+			timeoutMs: 50,
+			maxRetries: 0,
+			chunkDelayMs: 0
+		})).resolves.toBeUndefined();
+
+		const writes = transport.writes.map((bytes) => new TextDecoder().decode(bytes));
+		expect(writes.slice(0, 3)).toEqual(['\r\n', '\r\n', '\r\n']);
+		expect(writes).toHaveLength(35);
+		expect(writes.slice(3).every((write) => write.startsWith('image ') && write.endsWith('\n'))).toBe(true);
+		expect(writes.join('')).not.toContain('\b');
+		expect(writes).not.toContain('image clear\n');
 	});
 
 	it('rejects multiline console input', async () => {

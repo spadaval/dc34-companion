@@ -59,6 +59,10 @@ export class VirtualBadgeTransport implements BadgeTransport {
 		if (!this.connected) throw new Error('Virtual badge is not connected. Call connect() first.');
 
 		const framed = decoder.decode(bytes);
+		if (framed === '\r\n') {
+			this.enqueue(encoder.encode('Commands: echo, ver, test, image, bio\n'));
+			return;
+		}
 		const command = framed.endsWith('\n') ? framed.slice(0, -1) : framed;
 		const response = this.handleCommand(command, framed.endsWith('\n'));
 		this.enqueue(encoder.encode(`[console] ${command}\n${response}\n`));
@@ -106,7 +110,12 @@ export class VirtualBadgeTransport implements BadgeTransport {
 		}
 
 		const chunk = parseImageChunk(command);
-		if (!chunk || !this.stagingImage) return 'ERR';
+		if (!chunk) return 'ERR';
+		if (chunk.index === 0) {
+			this.stagingImage = new Uint8Array(IMAGE_BYTES);
+			this.chunks.clear();
+		}
+		if (!this.stagingImage) return 'ERR';
 		this.stagingImage.set(chunk.data, chunk.index * IMAGE_CHUNK_DATA_BYTES);
 		this.chunks.add(chunk.index);
 		if (this.chunks.size === IMAGE_CHUNK_COUNT) this.image = this.stagingImage.slice();

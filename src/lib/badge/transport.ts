@@ -50,9 +50,8 @@ const encoder = new TextEncoder();
 const DEFAULT_TIMEOUT_MS = 4_000;
 const DEFAULT_MAX_RETRIES = 4;
 const DEFAULT_RETRY_DELAY_MS = 500;
-const CONSOLE_CLEAR_CHARACTERS = 64;
-const CONSOLE_CLEAR_BATCH_SIZE = 8;
-const CONSOLE_CLEAR_BATCH_DELAY_MS = 10;
+const UPLOAD_FLUSH_LINES = 3;
+const UPLOAD_FLUSH_TIMEOUT_MS = 1_000;
 
 /** A single-owner, transport-neutral line protocol session. */
 export class BadgeSession {
@@ -78,7 +77,7 @@ export class BadgeSession {
 			throw new RangeError(`An image upload requires exactly ${IMAGE_BYTES} bytes.`);
 		}
 		return this.enqueue(async () => {
-			await this.transactUnlocked('image clear', ['clear'], options);
+			await this.flushConsole(options.signal);
 			for (let index = 0; index < IMAGE_CHUNK_COUNT; index += 1) {
 				const start = index * 64;
 				const result = await this.transactUnlocked(imageChunkCommand(index, image.subarray(start, start + 64)), ['ok', 'success'], options);
@@ -165,14 +164,25 @@ export class BadgeSession {
 	}
 
 	private async writeCommand(command: string, signal?: AbortSignal): Promise<void> {
-		const clearBatch = encoder.encode('\b'.repeat(CONSOLE_CLEAR_BATCH_SIZE));
-		for (let sent = 0; sent < CONSOLE_CLEAR_CHARACTERS; sent += CONSOLE_CLEAR_BATCH_SIZE) {
-			await this.transport.write(clearBatch, signal);
-			// Serial input is forwarded as individual Xous keyboard messages. Give the
-			// console time to drain each batch before adding more events to its queue.
-			await delay(CONSOLE_CLEAR_BATCH_DELAY_MS, signal);
-		}
 		await this.transport.write(encoder.encode(`${command}\n`), signal);
+	}
+
+	/** Match dc34-image's startup synchronization before beginning an upload. */
+	private async flushConsole(signal?: AbortSignal): Promise<void> {
+		this.pendingLines = [];
+		this.parser.reset();
+		for (let index = 0; index < UPLOAD_FLUSH_LINES; index += 1) {
+			await this.transport.write(encoder.encode('\r\n'), signal);
+			const timeout = new AbortController();
+			const timeoutId = setTimeout(() => timeout.abort(), UPLOAD_FLUSH_TIMEOUT_MS);
+			try {
+				await this.nextLine(combineSignals(signal, timeout.signal));
+			} catch (error) {
+				if (!timeout.signal.aborted || signal?.aborted) throw error;
+			} finally {
+				clearTimeout(timeoutId);
+			}
+		}
 	}
 
 	private async enqueue<T>(operation: () => Promise<T>): Promise<T> {

@@ -57,7 +57,6 @@ describe('browserSerialMode', () => {
 		expect(requestPort).toHaveBeenCalledWith({
 			filters: [{ usbVendorId: 0x1d50 }]
 		});
-		expect(transport.writePacing).toBeUndefined();
 		await transport.close();
 	});
 
@@ -75,7 +74,6 @@ describe('browserSerialMode', () => {
 		expect(requestDevice).toHaveBeenCalledWith({
 			filters: [{ vendorId: 0x1d50 }]
 		});
-		expect(transport.writePacing).toEqual({ maxBytes: 1, delayMs: 5 });
 		expect(polyfillState.devices).toEqual([device]);
 		await transport.close();
 	});

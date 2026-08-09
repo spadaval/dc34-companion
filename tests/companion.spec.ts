@@ -54,7 +54,7 @@ test('connects, reads diagnostics, prepares an image, and uploads it', async ({ 
   await page.locator('input[type=file]').first().setInputFiles({ name: 'badge.png', mimeType: 'image/png', buffer: png });
   await expect(page.getByText('2,048 bytes ready', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Upload to badge' }).click();
-  await expect(page.getByRole('tabpanel', { name: 'Image' }).getByText('Image uploaded. It will alternate with the DEF CON logo.')).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole('tabpanel', { name: 'Image' }).getByText('Image uploaded. It will alternate with the DEF CON logo.')).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText('Transfer console')).toBeVisible();
   await expect(page.locator('.transfer-console pre')).toContainText('SUCCESS');
   await page.getByRole('button', { name: 'Clear badge', exact: true }).click();

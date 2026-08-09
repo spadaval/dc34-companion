@@ -9,6 +9,7 @@ import {
 } from './protocol';
 
 export interface BadgeTransport {
+	/** Optional timing override, primarily for deterministic in-memory tests. */
 	readonly writePacing?: { maxBytes: number; delayMs: number };
 	write(bytes: Uint8Array, signal?: AbortSignal): Promise<void>;
 	read(signal?: AbortSignal): Promise<Uint8Array | null>;
@@ -53,6 +54,8 @@ const DEFAULT_MAX_RETRIES = 4;
 const DEFAULT_RETRY_DELAY_MS = 500;
 const UPLOAD_FLUSH_LINES = 3;
 const UPLOAD_FLUSH_TIMEOUT_MS = 1_000;
+const COMMAND_WRITE_BYTES = 1;
+const COMMAND_WRITE_DELAY_MS = 5;
 
 /** A single-owner, transport-neutral line protocol session. */
 export class BadgeSession {
@@ -166,8 +169,8 @@ export class BadgeSession {
 
 	private async writeCommand(command: string, signal?: AbortSignal): Promise<void> {
 		const bytes = encoder.encode(`${command}\n`);
-		const maxBytes = this.transport.writePacing?.maxBytes ?? bytes.byteLength;
-		const delayMs = this.transport.writePacing?.delayMs ?? 0;
+		const maxBytes = this.transport.writePacing?.maxBytes ?? COMMAND_WRITE_BYTES;
+		const delayMs = this.transport.writePacing?.delayMs ?? COMMAND_WRITE_DELAY_MS;
 		for (let offset = 0; offset < bytes.byteLength; offset += maxBytes) {
 			await this.transport.write(bytes.subarray(offset, offset + maxBytes), signal);
 			if (offset + maxBytes < bytes.byteLength) {

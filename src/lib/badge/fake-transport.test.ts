@@ -4,7 +4,7 @@ import { FakeBadgeTransport } from './fake-transport';
 import { IMAGE_BYTES } from './protocol';
 import { BadgeProtocolError, BadgeSession } from './transport';
 
-const commandWrites = (command: string) => [`${command}\n`];
+const commandWrites = (command: string) => [...`${command}\n`];
 
 describe('FakeBadgeTransport with BadgeSession', () => {
 	it('ignores echoes and logs before accepting a response', async () => {

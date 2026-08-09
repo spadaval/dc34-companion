@@ -49,7 +49,7 @@
     if (hardwareCheckActive && line.includes('HW.PASS')) hardwareResult = 'pass';
     if (hardwareCheckActive && line.includes('HW.FAIL')) hardwareResult = 'fail';
     consoleLines = [...consoleLines.slice(-79), line];
-    if (captureTransfer) transferLines = [...transferLines.slice(-39), line];
+    if (captureTransfer) transferLines = [...transferLines, line];
   }
 
   function handleUnexpectedDisconnect(): void {

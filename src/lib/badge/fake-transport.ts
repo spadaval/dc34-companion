@@ -10,6 +10,8 @@ export class FakeBadgeTransport implements BadgeTransport {
 		signal?: AbortSignal;
 	}[] = [];
 
+	constructor(readonly writePacing?: { maxBytes: number; delayMs: number }) {}
+
 	async write(bytes: Uint8Array, signal?: AbortSignal): Promise<void> {
 		if (signal?.aborted) throw abortError();
 		this.writes.push(bytes.slice());

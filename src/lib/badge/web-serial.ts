@@ -62,6 +62,12 @@ export class WebSerialTransport implements BadgeTransport {
     return this.#port !== null;
   }
 
+  get writePacing(): { maxBytes: number; delayMs: number } | undefined {
+    // The badge turns every received CDC byte into a nonblocking keyboard
+    // message. WebUSB bulk transfers otherwise overrun that small queue.
+    return this.#mode === 'web-usb' ? { maxBytes: 1, delayMs: 5 } : undefined;
+  }
+
   async connect(): Promise<void> {
     if (this.#port) return;
 

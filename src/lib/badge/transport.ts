@@ -54,8 +54,8 @@ const DEFAULT_MAX_RETRIES = 4;
 const DEFAULT_RETRY_DELAY_MS = 500;
 const UPLOAD_FLUSH_LINES = 3;
 const UPLOAD_FLUSH_TIMEOUT_MS = 1_000;
-const COMMAND_WRITE_BYTES = 1;
-const COMMAND_WRITE_DELAY_MS = 5;
+const COMMAND_WRITE_BYTES = 8;
+const COMMAND_WRITE_DELAY_MS = 100;
 
 /** A single-owner, transport-neutral line protocol session. */
 export class BadgeSession {

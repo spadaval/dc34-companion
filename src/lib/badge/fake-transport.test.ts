@@ -4,7 +4,7 @@ import { FakeBadgeTransport } from './fake-transport';
 import { IMAGE_BYTES } from './protocol';
 import { BadgeProtocolError, BadgeSession } from './transport';
 
-const commandWrites = (command: string) => [...`${command}\n`];
+const commandWrites = (command: string) => `${command}\n`.match(/.{1,8}/gs) ?? [];
 
 describe('FakeBadgeTransport with BadgeSession', () => {
 	it('ignores echoes and logs before accepting a response', async () => {
@@ -47,7 +47,7 @@ describe('FakeBadgeTransport with BadgeSession', () => {
 	});
 
 	it('uploads using dc34-image framing without clears or backspaces', async () => {
-		const transport = new FakeBadgeTransport({ maxBytes: 1, delayMs: 0 });
+		const transport = new FakeBadgeTransport({ maxBytes: 8, delayMs: 0 });
 		transport.enqueueText(`ready\nready\nready\n${'OK\n'.repeat(31)}SUCCESS\n`);
 		const session = new BadgeSession(transport);
 
@@ -59,7 +59,7 @@ describe('FakeBadgeTransport with BadgeSession', () => {
 
 		const writes = transport.writes.map((bytes) => new TextDecoder().decode(bytes));
 		expect(writes.slice(0, 3)).toEqual(['\r\n', '\r\n', '\r\n']);
-		expect(writes.slice(3).every((write) => write.length === 1)).toBe(true);
+		expect(writes.slice(3).every((write) => write.length <= 8)).toBe(true);
 		expect(writes.slice(3).filter((write) => write.endsWith('\n'))).toHaveLength(32);
 		expect(writes.join('')).not.toContain('\b');
 		expect(writes.join('')).not.toContain('image clear\n');

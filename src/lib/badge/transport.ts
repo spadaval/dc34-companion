@@ -52,6 +52,8 @@ const DEFAULT_MAX_RETRIES = 4;
 const DEFAULT_RETRY_DELAY_MS = 500;
 const UPLOAD_FLUSH_LINES = 3;
 const UPLOAD_FLUSH_TIMEOUT_MS = 1_000;
+const COMMAND_WRITE_BYTES = 8;
+const COMMAND_WRITE_DELAY_MS = 10;
 
 /** A single-owner, transport-neutral line protocol session. */
 export class BadgeSession {
@@ -164,7 +166,13 @@ export class BadgeSession {
 	}
 
 	private async writeCommand(command: string, signal?: AbortSignal): Promise<void> {
-		await this.transport.write(encoder.encode(`${command}\n`), signal);
+		const bytes = encoder.encode(`${command}\n`);
+		for (let offset = 0; offset < bytes.byteLength; offset += COMMAND_WRITE_BYTES) {
+			await this.transport.write(bytes.subarray(offset, offset + COMMAND_WRITE_BYTES), signal);
+			if (offset + COMMAND_WRITE_BYTES < bytes.byteLength) {
+				await delay(COMMAND_WRITE_DELAY_MS, signal);
+			}
+		}
 	}
 
 	/** Match dc34-image's startup synchronization before beginning an upload. */

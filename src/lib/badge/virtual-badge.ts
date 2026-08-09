@@ -37,6 +37,7 @@ export class VirtualBadgeTransport implements BadgeTransport {
 	private readonly chunks = new Set<number>();
 	private readonly incoming: Uint8Array[] = [];
 	private readonly readers: Reader[] = [];
+	private outgoing = '';
 
 	constructor(private readonly onStateChange?: (state: VirtualBadgeState) => void) {}
 
@@ -58,14 +59,19 @@ export class VirtualBadgeTransport implements BadgeTransport {
 		throwIfAborted(signal);
 		if (!this.connected) throw new Error('Virtual badge is not connected. Call connect() first.');
 
-		const framed = decoder.decode(bytes);
-		if (framed === '\r\n') {
-			this.enqueue(encoder.encode('Commands: echo, ver, test, image, bio\n'));
-			return;
+		this.outgoing += decoder.decode(bytes);
+		let newline: number;
+		while ((newline = this.outgoing.indexOf('\n')) !== -1) {
+			let command = this.outgoing.slice(0, newline);
+			this.outgoing = this.outgoing.slice(newline + 1);
+			if (command.endsWith('\r')) command = command.slice(0, -1);
+			if (!command) {
+				this.enqueue(encoder.encode('Commands: echo, ver, test, image, bio\n'));
+				continue;
+			}
+			const response = this.handleCommand(command, true);
+			this.enqueue(encoder.encode(`[console] ${command}\n${response}\n`));
 		}
-		const command = framed.endsWith('\n') ? framed.slice(0, -1) : framed;
-		const response = this.handleCommand(command, framed.endsWith('\n'));
-		this.enqueue(encoder.encode(`[console] ${command}\n${response}\n`));
 	}
 
 	read(signal?: AbortSignal): Promise<Uint8Array | null> {

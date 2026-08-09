@@ -5,21 +5,32 @@ async function installFakeBadge(page: import('@playwright/test').Page): Promise<
     const encoder = new TextEncoder();
     let controller: ReadableStreamDefaultController<Uint8Array>;
     let imageChunks = 0;
+    let input = '';
+    const decoder = new TextDecoder();
     const readable = new ReadableStream<Uint8Array>({ start(next) { controller = next; } });
     const writable = new WritableStream<Uint8Array>({
       write(bytes) {
-        const command = new TextDecoder().decode(bytes).replace(/^\x08+/, '').trim();
-        if (!command) return;
-        controller.enqueue(encoder.encode(`[console] ${command}\n`));
-        if (command === 'ver xous') controller.enqueue(encoder.encode('Xous version: test-1.0\n'));
-        else if (command.startsWith('echo ')) controller.enqueue(encoder.encode(`${command.slice(5)}\n`));
-        else if (command === 'image clear') {
-          imageChunks = 0;
-          controller.enqueue(encoder.encode('CLEAR\n'));
-        } else if (command.startsWith('image ')) {
-          imageChunks += 1;
-          controller.enqueue(encoder.encode(imageChunks === 32 ? 'SUCCESS\n' : 'OK\n'));
-        } else if (command === 'test hw') controller.enqueue(encoder.encode('_|TT|_HW.PASS,_|TE|_\nXous version: test-1.0\n'));
+        input += decoder.decode(bytes);
+        let newline: number;
+        while ((newline = input.indexOf('\n')) !== -1) {
+          let command = input.slice(0, newline);
+          input = input.slice(newline + 1);
+          if (command.endsWith('\r')) command = command.slice(0, -1);
+          if (!command) {
+            controller.enqueue(encoder.encode('Commands: echo, ver, test, image, bio\n'));
+            continue;
+          }
+          controller.enqueue(encoder.encode(`[console] ${command}\n`));
+          if (command === 'ver xous') controller.enqueue(encoder.encode('Xous version: test-1.0\n'));
+          else if (command.startsWith('echo ')) controller.enqueue(encoder.encode(`${command.slice(5)}\n`));
+          else if (command === 'image clear') {
+            imageChunks = 0;
+            controller.enqueue(encoder.encode('CLEAR\n'));
+          } else if (command.startsWith('image ')) {
+            imageChunks += 1;
+            controller.enqueue(encoder.encode(imageChunks === 32 ? 'SUCCESS\n' : 'OK\n'));
+          } else if (command === 'test hw') controller.enqueue(encoder.encode('_|TT|_HW.PASS,_|TE|_\nXous version: test-1.0\n'));
+        }
       }
     });
     const port = { readable, writable, open: async () => {}, close: async () => controller.close() };
@@ -43,7 +54,7 @@ test('connects, reads diagnostics, prepares an image, and uploads it', async ({ 
   await page.locator('input[type=file]').first().setInputFiles({ name: 'badge.png', mimeType: 'image/png', buffer: png });
   await expect(page.getByText('2,048 bytes ready', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Upload to badge' }).click();
-  await expect(page.getByRole('tabpanel', { name: 'Image' }).getByText('Image uploaded. It will alternate with the DEF CON logo.')).toBeVisible({ timeout: 12_000 });
+  await expect(page.getByRole('tabpanel', { name: 'Image' }).getByText('Image uploaded. It will alternate with the DEF CON logo.')).toBeVisible({ timeout: 20_000 });
   await expect(page.getByText('Transfer console')).toBeVisible();
   await expect(page.locator('.transfer-console pre')).toContainText('SUCCESS');
   await page.getByRole('button', { name: 'Clear badge', exact: true }).click();
